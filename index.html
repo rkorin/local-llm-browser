@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browser LLM Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1419;
+      --panel: #182028;
+      --line: #2a3542;
+      --text: #e7edf5;
+      --muted: #9fb0c3;
+      --accent: #7dd3fc;
+      --error: #ff8a80;
+      --accent-strong: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0d1217 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .panel {
+      margin-top: 20px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1.9rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 120px;
+      padding: 6px 0;
+    }
+
+    .bubble {
+      max-width: 78%;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      font-size: 1.35rem;
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: -0.02em;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .bubble.game {
+      align-self: flex-start;
+      background: #0d1217;
+      border-top-left-radius: 6px;
+    }
+
+    .bubble.user {
+      align-self: flex-end;
+      background: #123247;
+      border-color: #235270;
+      border-top-right-radius: 6px;
+    }
+
+    .progress-shell {
+      height: 18px;
+      overflow: hidden;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #0d1217;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+      transition: width 180ms ease;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 1.05rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .status-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .debug-toggle {
+      padding: 10px 16px;
+      font-size: 0.95rem;
+    }
+
+    .danger-button {
+      border-color: rgba(255, 120, 120, 0.45);
+      color: #ffd8d8;
+    }
+
+    .danger-button:hover {
+      border-color: #ff8d8d;
+    }
+
+    .debug-panel {
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #0d1217;
+    }
+
+    .debug-panel h3 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+
+    .debug-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .debug-label {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .debug-pre {
+      margin: 0;
+      padding: 12px 14px;
+      min-height: 64px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #101821;
+      color: var(--text);
+      font: 0.95rem/1.45 Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .debug-textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #101821;
+      color: var(--text);
+      font: 0.95rem/1.45 Consolas, "Courier New", monospace;
+    }
+
+    .debug-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    code {
+      color: var(--accent);
+    }
+
+    .error {
+      color: var(--error);
+    }
+
+    .choice-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .choice-row.restart {
+      justify-content: flex-start;
+      margin-top: 18px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #0d1217;
+      color: var(--text);
+      font: inherit;
+      font-size: 1.15rem;
+    }
+
+    button {
+      padding: 14px 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #0d1217;
+      color: var(--text);
+      font: inherit;
+      font-size: 1.2rem;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+    }
+
+    .restart-button {
+      padding: 18px 28px;
+      font-size: 1.35rem;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Browser LLM Demo</h1>
+    <p>
+      Minimal browser-only skeleton for loading a remote WebLLM model and starting a tiny yes/no guessing game.
+    </p>
+
+    <section class="panel">
+      <h2>Status</h2>
+      <div class="progress-shell" aria-hidden="true">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="status" id="status-text">Waiting to start...</div>
+      <div class="status-actions">
+        <button type="button" class="debug-toggle" id="debug-toggle-button">Debug</button>
+        <button type="button" class="debug-toggle danger-button" id="reset-tree-button">Reset Base</button>
+      </div>
+      <section class="debug-panel hidden" id="debug-panel">
+        <h3>Last Model Call</h3>
+        <div class="debug-grid">
+          <div>
+            <div class="debug-label">Stage</div>
+            <pre class="debug-pre" id="debug-stage">No model call yet.</pre>
+          </div>
+          <div>
+            <div class="debug-label">Prompt</div>
+            <textarea class="debug-textarea" id="debug-prompt-input" spellcheck="false">No prompt yet.</textarea>
+            <div class="debug-actions">
+              <button type="button" class="debug-toggle" id="rerun-prompt-button">Send Again</button>
+            </div>
+          </div>
+          <div>
+            <div class="debug-label">Raw Response</div>
+            <pre class="debug-pre" id="debug-response">No response yet.</pre>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel hidden" id="game-panel">
+      <h2>Game</h2>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="choice-row hidden" id="choice-row">
+        <button type="button" id="yes-button">Yes</button>
+        <button type="button" id="no-button">No</button>
+      </div>
+      <div class="input-row hidden" id="input-row">
+        <input type="text" id="animal-input" placeholder="Type the animal name in English" />
+        <button type="button" id="submit-animal-button">Save</button>
+      </div>
+      <div class="choice-row restart hidden" id="restart-row">
+        <button type="button" class="restart-button" id="restart-button">Let's play again</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+    // Use a prebuilt remote model so the demo works without local model files.
+    const MODEL_ID = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
+    const MODEL_URL = "https://huggingface.co/mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC";
+    const MODEL_LIB_URL = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_84/base/Llama-3.2-3B-Instruct-q4f16_1_cs1k-webgpu.wasm";
+    const STORAGE_KEY = "animal-question-tree-v1";
+    const HEALTHCHECK_PROMPT = "hello";
+    const MAX_ANIMAL_INPUT_LENGTH = 30;
+    const OBVIOUS_PROFANITY = [ 
+      "fuck",
+      "shit",
+    ];
+
+    const progressBarElement = document.getElementById("progress-bar");
+    const statusElement = document.getElementById("status-text");
+    const gamePanelElement = document.getElementById("game-panel");
+    const chatLogElement = document.getElementById("chat-log");
+    const choiceRowElement = document.getElementById("choice-row");
+    const yesButtonElement = document.getElementById("yes-button");
+    const noButtonElement = document.getElementById("no-button");
+    const inputRowElement = document.getElementById("input-row");
+    const animalInputElement = document.getElementById("animal-input");
+    const submitAnimalButtonElement = document.getElementById("submit-animal-button");
+    const restartRowElement = document.getElementById("restart-row");
+    const restartButtonElement = document.getElementById("restart-button");
+    const debugToggleButtonElement = document.getElementById("debug-toggle-button");
+    const resetTreeButtonElement = document.getElementById("reset-tree-button");
+    const debugPanelElement = document.getElementById("debug-panel");
+    const debugStageElement = document.getElementById("debug-stage");
+    const debugPromptInputElement = document.getElementById("debug-prompt-input");
+    const debugResponseElement = document.getElementById("debug-response");
+    const rerunPromptButtonElement = document.getElementById("rerun-prompt-button");
+
+    let engine = null;
+    let knowledgeTree = loadTree();
+    let currentPath = [];
+    let awaitingAnimalForNode = null;
+    let isDebugReplayRunning = false;
+    let lastModelDebug = {
+      stage: "No model call yet.",
+      prompt: "No prompt yet.",
+      response: "No response yet.",
+    };
+    function setStatus(message) {
+      statusElement.textContent = String(message);
+    }
+
+    function setProgress(value) {
+      const safeValue = Math.max(0, Math.min(100, value));
+      progressBarElement.style.width = `${safeValue}%`;
+    }
+
+    function setError(message) {
+      statusElement.textContent = String(message);
+      statusElement.classList.add("error");
+    }
+
+    function clearError() {
+      statusElement.classList.remove("error");
+    }
+
+    function renderDebugPanel() {
+      debugStageElement.textContent = lastModelDebug.stage;
+      debugPromptInputElement.value = lastModelDebug.prompt;
+      debugResponseElement.textContent = lastModelDebug.response;
+    }
+
+    function recordModelDebug(stage, prompt, response) {
+      lastModelDebug = {
+        stage: String(stage),
+        prompt: String(prompt),
+        response: String(response),
+      };
+      renderDebugPanel();
+    }
+
+    async function runModelCall(stage, prompt) {
+      if (!engine) {
+        throw new Error("Model engine is not ready.");
+      }
+
+      try {
+        const reply = await engine.chat.completions.create({
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+        const content = reply?.choices?.[0]?.message?.content;
+        const responseText = typeof content === "string"
+          ? content
+          : JSON.stringify(content, null, 2);
+        recordModelDebug(stage, prompt, responseText || "[empty response]");
+        return reply;
+      } catch (error) {
+        recordModelDebug(stage, prompt, `ERROR: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    }
+
+    async function rerunDebugPrompt() {
+      if (isDebugReplayRunning) {
+        return;
+      }
+
+      const prompt = debugPromptInputElement.value.trim();
+      if (!prompt) {
+        setStatus("Debug prompt is empty.");
+        return;
+      }
+      if (!engine) {
+        setStatus("Model engine is not ready.");
+        return;
+      }
+
+      isDebugReplayRunning = true;
+      rerunPromptButtonElement.disabled = true;
+      debugPromptInputElement.disabled = true;
+      setStatus("Running edited debug prompt...");
+
+      try {
+        await runModelCall(`${lastModelDebug.stage} (debug replay)`, prompt);
+        setStatus("Edited debug prompt completed.");
+      } catch (error) {
+        setStatus(`Debug prompt failed. ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        isDebugReplayRunning = false;
+        rerunPromptButtonElement.disabled = false;
+        debugPromptInputElement.disabled = false;
+      }
+    }
+
+    function addBubble(role, message) {
+      const bubble = document.createElement("div");
+      bubble.className = `bubble ${role}`;
+      bubble.textContent = String(message);
+      chatLogElement.appendChild(bubble);
+      chatLogElement.scrollTop = chatLogElement.scrollHeight;
+    }
+
+    function addGameMessage(message) {
+      addBubble("game", message);
+    }
+
+    function addUserMessage(message) {
+      addBubble("user", message);
+    }
+
+    function resetChat() {
+      chatLogElement.textContent = "";
+    }
+
+    function showChoices() {
+      choiceRowElement.classList.remove("hidden");
+      inputRowElement.classList.add("hidden");
+      restartRowElement.classList.add("hidden");
+    }
+
+    function showAnimalInput() {
+      choiceRowElement.classList.add("hidden");
+      inputRowElement.classList.remove("hidden");
+      restartRowElement.classList.add("hidden");
+      animalInputElement.value = "";
+      animalInputElement.focus();
+    }
+
+    function showRestartButton() {
+      choiceRowElement.classList.add("hidden");
+      inputRowElement.classList.add("hidden");
+      restartRowElement.classList.remove("hidden");
+      restartButtonElement.textContent = "Let's play again";
+    }
+
+    function articleFor(word) {
+      return /^[aeiou]/i.test(word) ? "an" : "a";
+    }
+
+    function animalLabel(animal) {
+      return `${articleFor(animal)} ${animal}`;
+    }
+
+    function createDefaultTree() {
+      return {
+        type: "animal",
+        animal: "cat",
+      };
+    }
+
+    function loadTree() {
+      try {
+        const rawValue = localStorage.getItem(STORAGE_KEY);
+        if (!rawValue) {
+          return createDefaultTree();
+        }
+        const parsed = JSON.parse(rawValue);
+        if (!parsed || typeof parsed !== "object") {
+          return createDefaultTree();
+        }
+        return parsed;
+      } catch {
+        return createDefaultTree();
+      }
+    }
+
+    function saveTree() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(knowledgeTree));
+    }
+
+    function resetKnowledgeTree() {
+      knowledgeTree = createDefaultTree();
+      localStorage.removeItem(STORAGE_KEY);
+      saveTree();
+      awaitingAnimalForNode = null;
+      currentPath = [];
+      setStatus("The saved tree was reset.");
+      resetChat();
+      if (!gamePanelElement.classList.contains("hidden")) {
+        addGameMessage("The local knowledge base was reset.");
+        renderCurrentNode();
+      }
+    }
+
+    function getNodeAtPath(path) {
+      let node = knowledgeTree;
+      for (const step of path) {
+        node = node?.[step];
+      }
+      return node;
+    }
+
+    function replaceNodeAtPath(path, nextNode) {
+      if (path.length === 0) {
+        knowledgeTree = nextNode;
+        saveTree();
+        return;
+      }
+
+      const parentPath = path.slice(0, -1);
+      const branchName = path[path.length - 1];
+      const parentNode = getNodeAtPath(parentPath);
+      parentNode[branchName] = nextNode;
+      saveTree();
+    }
+
+    function normalizeQuestion(text) {
+      const firstLine = String(text ?? "")
+        .replace(/^["'\s]+|["'\s]+$/g, "")
+        .split(/\r?\n/)[0]
+        .trim();
+      if (!firstLine) {
+        return "";
+      }
+      return firstLine.endsWith("?") ? firstLine : `${firstLine}?`;
+    }
+
+    function normalizeAnimalName(value) {
+      return String(value ?? "").trim().toLowerCase();
+    }
+
+    function sanitizeUserAnimalInput(value) {
+      return String(value ?? "").trim();
+    }
+
+    function isPrompt0ResultConsistentWithInput(userInput, canonicalAnimal, displayAnimal) {
+      const rawInput = normalizeAnimalName(userInput);
+      const normalizedCanonical = normalizeAnimalName(canonicalAnimal);
+      const normalizedDisplay = normalizeAnimalName(displayAnimal);
+
+      if (!rawInput) {
+        return false;
+      }
+
+      // Prompt 0 may canonicalize "puppy" -> "dog", but it should not invent a
+      // totally different word when the original input is still available.
+      return normalizedDisplay === rawInput || normalizedCanonical === rawInput;
+    }
+
+    function detectLocalInvalidAnimalInput(value) {
+      const trimmed = sanitizeUserAnimalInput(value);
+      const normalized = normalizeAnimalName(trimmed);
+
+      if (!trimmed) {
+        return { isValidAnimal: false, reasonCode: "empty" };
+      }
+      if (OBVIOUS_PROFANITY.some((word) => normalized.includes(word))) {
+        return { isValidAnimal: false, reasonCode: "profanity" };
+      }
+      if (!/^[A-Za-z\s-]+$/.test(trimmed)) {
+        return { isValidAnimal: false, reasonCode: "english_only" };
+      }
+      if (/[0-9]/.test(trimmed)) {
+        return { isValidAnimal: false, reasonCode: "blocked_or_invalid" };
+      }
+      if (trimmed.length > MAX_ANIMAL_INPUT_LENGTH) {
+        return { isValidAnimal: false, reasonCode: "unclear" };
+      }
+      if (trimmed.split(/\s+/).length > 3) {
+        return { isValidAnimal: false, reasonCode: "unclear" };
+      }
+
+      return {
+        isValidAnimal: true,
+        reasonCode: "valid",
+      };
+    }
+
+    function canUseSimpleAnimalFallback(value) {
+      const trimmed = sanitizeUserAnimalInput(value);
+      const normalized = normalizeAnimalName(trimmed);
+      if (!trimmed) {
+        return false;
+      }
+      if (trimmed.includes(" ")) {
+        return false;
+      }
+      if (!/^[A-Za-z-]+$/.test(trimmed)) {
+        return false;
+      }
+      if (normalized.length < 2 || normalized.length > 20) {
+        return false;
+      }
+      if (normalized === "animal") {
+        return false;
+      }
+      return !OBVIOUS_PROFANITY.some((word) => normalized.includes(word));
+    }
+
+    function invalidAnimalMessage(reasonCode) {
+      if (reasonCode === "english_only") {
+        return "Use English animal names only, for example: dog, whale, eagle.";
+      }
+      if (reasonCode === "blocked_or_invalid") {
+        return "That is not acceptable. Type a real animal, for example: dog, whale, eagle.";
+      }
+      if (reasonCode === "unclear") {
+        return "I cannot learn from that. Type one clear animal name, for example: dog, whale, eagle.";
+      }
+      return "That does not look like an animal. Type a real animal, for example: dog, whale, eagle.";
+    }
+
+    function extractJsonObject(text) {
+      const rawText = String(text ?? "").trim();
+      const startIndex = rawText.indexOf("{");
+      const endIndex = rawText.lastIndexOf("}");
+      if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+        throw new Error("Model did not return a JSON object.");
+      }
+      return rawText.slice(startIndex, endIndex + 1);
+    }
+
+    function extractYesNoAnswer(text) {
+      const normalized = String(text ?? "").trim().toUpperCase();
+      if (normalized === "YES" || normalized.startsWith("YES\n")) {
+        return true;
+      }
+      if (normalized === "NO" || normalized.startsWith("NO\n")) {
+        return false;
+      }
+      throw new Error("Model did not return YES or NO.");
+    }
+
+    function isPlaceholderAnimalName(value) {
+      const normalized = normalizeAnimalName(value);
+      if (!normalized) {
+        return false;
+      }
+      return (
+        normalized.includes("common_english_name_if_same_else_null")
+        || normalized.includes("english_common_name_or_null")
+        || normalized.includes("true or false")
+      );
+    }
+
+    async function generateQuestionForAnimals(knownAnimal, newAnimal) {
+      if (!engine) {
+        return {
+          question: `Is it ${animalLabel(knownAnimal)}?`,
+          yesAnimal: knownAnimal,
+          noAnimal: newAnimal,
+        };
+      }
+
+      const prompt = `You are a question generator for an animal guessing game.
+
+The game needs one yes/no question that clearly distinguishes two animals.
+
+Known animal:
+"${knownAnimal}"
+
+New animal:
+"${newAnimal}"
+
+Generate one short, general, factual question.
+
+Rules:
+- The question must be answerable by "yes" or "no".
+- The question must separate the two animals reliably.
+- Prefer biological/category/physical/habitat traits.
+- Do NOT use animal-specific sounds like "Does it meow?" or "Does it bark?"
+- Do NOT mention either animal name directly.
+- Do NOT ask about subjective traits.
+- Do NOT ask about rare edge cases.
+- The question must be simple enough for a child.
+- Return only valid JSON.
+- Do not add explanations.
+
+Bad examples:
+- "Does it meow?"
+- "Does it bark?"
+- "Is it cute?"
+- "Can it be a pet?"
+
+Good examples:
+- "Is it from the cat family?"
+- "Does it usually live in water?"
+- "Does it have hooves?"
+- "Is it a bird?"
+- "Does it have scales?"
+
+Return format:
+{
+  "question": "...?",
+  "yesAnimal": "${knownAnimal} or ${newAnimal}",
+  "noAnimal": "${knownAnimal} or ${newAnimal}"
+}`;
+
+      const reply = await runModelCall("Prompt 1: generate question", prompt);
+
+      const content = reply?.choices?.[0]?.message?.content;
+      const jsonText = extractJsonObject(content);
+      const parsed = JSON.parse(jsonText);
+      const question = normalizeQuestion(parsed?.question);
+      const yesAnimal = normalizeAnimalName(parsed?.yesAnimal);
+      const noAnimal = normalizeAnimalName(parsed?.noAnimal);
+
+      const allowedAnimals = new Set([
+        normalizeAnimalName(knownAnimal),
+        normalizeAnimalName(newAnimal),
+      ]);
+
+      if (!question) {
+        throw new Error("Model returned an empty question.");
+      }
+      if (!allowedAnimals.has(yesAnimal) || !allowedAnimals.has(noAnimal)) {
+        throw new Error("Model returned unexpected animal names.");
+      }
+      if (yesAnimal === noAnimal) {
+        throw new Error("Model assigned the same animal to both branches.");
+      }
+
+      return {
+        question,
+        yesAnimal,
+        noAnimal,
+      };
+    }
+
+    async function validateGeneratedQuestion(knownAnimal, newAnimal, candidate) {
+      if (!engine) {
+        return {
+          isValid: true,
+          question: candidate.question,
+          yesAnimal: candidate.yesAnimal,
+          noAnimal: candidate.noAnimal,
+        };
+      }
+
+      const prompt = `You are a strict validator for an animal guessing game question.
+
+Known animal:
+"${knownAnimal}"
+
+New animal:
+"${newAnimal}"
+  
+Do not explain.
+the answer for YOUR question should be
+YES - ${knownAnimal}
+No - ${newAnimal}
+
+do not use animal names in question
+RETURN only text of question`;
+
+      const reply = await runModelCall("Prompt 2: validate question", prompt);
+
+      const content = reply?.choices?.[0]?.message?.content;
+      const question = normalizeQuestion(content);
+
+      if (!question) {
+        throw new Error("Validator returned an empty question.");
+      }
+
+      return {
+        isValid: true,
+        question,
+        yesAnimal: normalizeAnimalName(knownAnimal),
+        noAnimal: normalizeAnimalName(newAnimal),
+      };
+    }
+
+    async function normalizeAnimalMatch(guessedAnimal, userAnimal) {
+      const guessedNormalized = normalizeAnimalName(guessedAnimal);
+      const userNormalized = normalizeAnimalName(userAnimal);
+
+      if (guessedNormalized === userNormalized) {
+        return {
+          sameAnimal: true,
+          canonicalAnimal: guessedNormalized,
+          guessedNormalized,
+          userNormalized,
+        };
+      }
+
+      if (!engine) {
+        return {
+          sameAnimal: false,
+          canonicalAnimal: null,
+          guessedNormalized,
+          userNormalized,
+        };
+      }
+
+      const prompt = `is "${guessedAnimal}" and "${userAnimal}" the same animal?
+say yes or no
+no explanation
+no punctuation`;
+
+      const reply = await runModelCall("Prompt 1.5: same animal check", prompt);
+
+      const content = reply?.choices?.[0]?.message?.content;
+      const sameAnimal = extractYesNoAnswer(content);
+
+      return {
+        sameAnimal,
+        canonicalAnimal: sameAnimal ? guessedNormalized : null,
+        guessedNormalized,
+        userNormalized,
+      };
+    }
+
+    async function validateAnimalInput(userInput) {
+      const localCheck = detectLocalInvalidAnimalInput(userInput);
+      if (!localCheck.isValidAnimal) {
+        const mappedReasonCode = localCheck.reasonCode === "not_an_animal"
+          ? "not_an_animal"
+          : (localCheck.reasonCode === "english_only" ? "english_only" : "blocked_or_invalid");
+        return {
+          isValidAnimal: false,
+          canonicalAnimal: null,
+          displayAnimal: null,
+          reasonCode: mappedReasonCode,
+        };
+      }
+
+      if (!engine) {
+        const normalized = normalizeAnimalName(userInput);
+        return {
+          isValidAnimal: true,
+          canonicalAnimal: normalized,
+          displayAnimal: sanitizeUserAnimalInput(userInput),
+          reasonCode: "valid",
+        };
+      }
+
+      const prompt = `Decide whether the word "${sanitizeUserAnimalInput(userInput)}" is a real common animal name.
+answer YES if yes
+and NO if no
+NO explanation`;
+
+      const reply = await runModelCall("Prompt 0: validate animal input", prompt);
+
+      const content = reply?.choices?.[0]?.message?.content;
+      const isValidAnimal = extractYesNoAnswer(content);
+      const cleanedInput = sanitizeUserAnimalInput(userInput);
+      const canonicalAnimal = normalizeAnimalName(userInput);
+
+      return {
+        isValidAnimal,
+        canonicalAnimal: isValidAnimal ? canonicalAnimal : null,
+        displayAnimal: isValidAnimal ? cleanedInput : null,
+        reasonCode: isValidAnimal ? "valid" : "not_an_animal",
+      };
+    }
+
+    async function verifyModelResponse() {
+      if (!engine) {
+        throw new Error("Model engine is not ready.");
+      }
+
+      const reply = await runModelCall("Health check", HEALTHCHECK_PROMPT);
+
+      const content = reply?.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("Model returned an empty response to the hello check.");
+      }
+    }
+
+    function renderCurrentNode() {
+      const node = getNodeAtPath(currentPath);
+      gamePanelElement.classList.remove("hidden");
+
+      if (node?.type === "question") {
+        addGameMessage(node.question);
+        showChoices();
+        return;
+      }
+
+      if (node?.type === "animal") {
+        addGameMessage(`Is it ${animalLabel(node.animal)}?`);
+        showChoices();
+        return;
+      }
+
+      addGameMessage("The saved tree looks invalid. Reset the page storage and try again.");
+      choiceRowElement.classList.add("hidden");
+      inputRowElement.classList.add("hidden");
+      restartRowElement.classList.add("hidden");
+    }
+
+    function startRound() {
+      awaitingAnimalForNode = null;
+      currentPath = [];
+      resetChat();
+      setStatus("The model is ready. Think of an animal and answer with yes or no.");
+      renderCurrentNode();
+    }
+
+    async function handleYes() {
+      addUserMessage("Yes");
+      const node = getNodeAtPath(currentPath);
+      if (node?.type === "question") {
+        currentPath = [...currentPath, "yes"];
+        renderCurrentNode();
+        return;
+      }
+
+      if (node?.type === "animal") {
+        addGameMessage(`I guessed it. It is ${animalLabel(node.animal)}.`);
+        showRestartButton();
+      }
+    }
+
+    async function handleNo() {
+      addUserMessage("No");
+      const node = getNodeAtPath(currentPath);
+      if (node?.type === "question") {
+        currentPath = [...currentPath, "no"];
+        renderCurrentNode();
+        return;
+      }
+
+      if (node?.type === "animal") {
+        awaitingAnimalForNode = { ...node, path: [...currentPath] };
+        addGameMessage("Then I do not know. I lost.");
+        addGameMessage("Type the animal you chose.");
+        showAnimalInput();
+      }
+    }
+
+    async function handleAnimalSubmit() {
+      if (!awaitingAnimalForNode) {
+        return;
+      }
+
+      const newAnimal = animalInputElement.value.trim().toLowerCase();
+      const validation = await validateAnimalInput(newAnimal).catch(() => {
+        if (canUseSimpleAnimalFallback(newAnimal)) {
+          return {
+            isValidAnimal: true,
+            canonicalAnimal: normalizeAnimalName(newAnimal),
+            displayAnimal: sanitizeUserAnimalInput(newAnimal),
+            reasonCode: "valid",
+          };
+        }
+
+        return {
+          isValidAnimal: false,
+          canonicalAnimal: null,
+          displayAnimal: null,
+          reasonCode: detectLocalInvalidAnimalInput(newAnimal).reasonCode || "unclear",
+        };
+      });
+
+      if (
+        validation.isValidAnimal &&
+        validation.canonicalAnimal &&
+        !isPrompt0ResultConsistentWithInput(newAnimal, validation.canonicalAnimal, validation.displayAnimal)
+      ) {
+        addUserMessage(sanitizeUserAnimalInput(newAnimal) || "...");
+        setStatus("The model returned an inconsistent animal normalization.");
+        addGameMessage("That answer looks inconsistent. Type one simple animal name in English.");
+        showAnimalInput();
+        return;
+      }
+
+      if (!validation.isValidAnimal || !validation.canonicalAnimal) {
+        addUserMessage(sanitizeUserAnimalInput(newAnimal) || "...");
+        setStatus("The input was rejected.");
+        addGameMessage(invalidAnimalMessage(validation.reasonCode));
+        showAnimalInput();
+        return;
+      }
+
+      const knownAnimal = awaitingAnimalForNode.animal;
+      const displayAnimal = validation.displayAnimal || sanitizeUserAnimalInput(newAnimal);
+      const canonicalNewAnimal = validation.canonicalAnimal;
+      let sameAnimalResult;
+      try {
+        sameAnimalResult = await normalizeAnimalMatch(knownAnimal, displayAnimal);
+      } catch {
+        sameAnimalResult = {
+          sameAnimal: normalizeAnimalName(knownAnimal) === normalizeAnimalName(displayAnimal),
+          canonicalAnimal: null,
+          guessedNormalized: normalizeAnimalName(knownAnimal),
+          userNormalized: normalizeAnimalName(displayAnimal),
+        };
+      }
+
+      if (sameAnimalResult.sameAnimal) {
+        addUserMessage(displayAnimal);
+        const canonicalAnimal = sameAnimalResult.canonicalAnimal || normalizeAnimalName(knownAnimal);
+        if (canonicalAnimal) {
+          replaceNodeAtPath(awaitingAnimalForNode.path, {
+            type: "animal",
+            animal: canonicalAnimal,
+          });
+        }
+        awaitingAnimalForNode = null;
+        setStatus("Same animal detected. The tree was not expanded.");
+        addGameMessage("OK, that also counts. I guessed it!");
+        showRestartButton();
+        return;
+      }
+
+      addUserMessage(displayAnimal);
+      setStatus(`Learning how to distinguish ${knownAnimal} from ${canonicalNewAnimal}...`);
+      addGameMessage("Saving a new question...");
+      inputRowElement.classList.add("hidden");
+
+      let question;
+      let mapping;
+      try {
+        mapping = await generateQuestionForAnimals(knownAnimal, canonicalNewAnimal);
+        mapping = await validateGeneratedQuestion(knownAnimal, canonicalNewAnimal, mapping);
+      } catch (error) {
+        mapping = {
+          question: `Is it ${animalLabel(knownAnimal)}?`,
+          yesAnimal: knownAnimal,
+          noAnimal: canonicalNewAnimal,
+        };
+        setStatus(
+          `The model did not return a clean question, so the game used a fallback question. ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      question = mapping.question;
+
+      replaceNodeAtPath(awaitingAnimalForNode.path, {
+        type: "question",
+        question,
+        yes: {
+          type: "animal",
+          animal: mapping.yesAnimal,
+        },
+        no: {
+          type: "animal",
+          animal: mapping.noAnimal,
+        },
+      });
+
+      awaitingAnimalForNode = null;
+      setStatus("Saved to local storage.");
+      addGameMessage(`Saved.\nNew question: ${question}`);
+      showRestartButton();
+    }
+
+    async function assertBrowserSupport() {
+      if (!("gpu" in navigator)) {
+        throw new Error(
+          "WebGPU is not available in this browser. Try a recent Chrome, Edge, or another browser with WebGPU enabled.",
+        );
+      }
+    }
+
+    async function assertRemoteFilesExist() {
+      if (window.location.protocol === "file:") {
+        throw new Error(
+          "This page is being opened with file://. Run the demo from C:\\work-poc\\portfolio\\local-llm-browser with `python -m http.server 8080` and open http://localhost:8080.",
+        );
+      }
+
+      let configResponse;
+      try {
+        configResponse = await fetch(`${MODEL_URL}/resolve/main/mlc-chat-config.json`, { method: "GET" });
+      } catch (error) {
+        throw new Error(
+          `Could not fetch remote model config from ${MODEL_URL}. Original error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (!configResponse.ok) {
+        throw new Error(
+          `Remote model config is not reachable at ${MODEL_URL}/resolve/main/mlc-chat-config.json.`,
+        );
+      }
+
+      let wasmResponse;
+      try {
+        wasmResponse = await fetch(MODEL_LIB_URL, { method: "GET" });
+      } catch (error) {
+        throw new Error(
+          `Could not fetch ${MODEL_LIB_URL}. Make sure model_lib.wasm exists and is reachable over HTTP. Original error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (!wasmResponse.ok) {
+        throw new Error(
+          `Remote model library is not reachable at ${MODEL_LIB}.`,
+        );
+      }
+    }
+
+    async function main() {
+      clearError();
+      setStatus("Checking browser support...");
+      setProgress(4);
+
+      try {
+        await assertBrowserSupport();
+        setStatus("Checking remote model files...");
+        setProgress(12);
+
+        await assertRemoteFilesExist();
+        setStatus("Loading model...");
+        setProgress(20);
+
+        // Register one remote prebuilt model record.
+        const appConfig = {
+          cacheBackend: "cache",
+          model_list: [
+            {
+              model: MODEL_URL,
+              model_id: MODEL_ID,
+              model_lib: MODEL_LIB_URL,
+            },
+          ],
+        };
+
+        engine = await webllm.CreateMLCEngine(MODEL_ID, {
+          appConfig,
+          initProgressCallback: (progress) => {
+            const text = progress?.text ?? "Loading...";
+            const percent = progress?.progress;
+            if (typeof percent === "number") {
+              setProgress(Math.round(percent * 100));
+              setStatus(text);
+            } else {
+              setStatus(text);
+            }
+          },
+        });
+
+        window.addEventListener("beforeunload", () => {
+          saveTree();
+        });
+
+        yesButtonElement.addEventListener("click", handleYes);
+        noButtonElement.addEventListener("click", handleNo);
+        submitAnimalButtonElement.addEventListener("click", handleAnimalSubmit);
+        restartButtonElement.addEventListener("click", startRound);
+        debugToggleButtonElement.addEventListener("click", () => {
+          debugPanelElement.classList.toggle("hidden");
+        });
+        resetTreeButtonElement.addEventListener("click", () => {
+          resetKnowledgeTree();
+        });
+        rerunPromptButtonElement.addEventListener("click", () => {
+          rerunDebugPrompt();
+        });
+        animalInputElement.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handleAnimalSubmit();
+          }
+        });
+        debugPromptInputElement.addEventListener("keydown", (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            rerunDebugPrompt();
+          }
+        });
+
+        renderDebugPanel();
+        setStatus("Model loaded.");
+        setProgress(100);
+        setStatus("Checking model response...");
+        await verifyModelResponse();
+        startRound();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(message);
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
+
+
+
+
+
