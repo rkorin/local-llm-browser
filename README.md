@@ -21,3 +21,13 @@ Then open:
 ```text
 http://localhost:8080
 ```
+
+## Learning goals
+
+This project is intended to grow into a study project for:
+
+- modern JavaScript that current browsers support without bundling;
+- system design;
+- design patterns.
+
+It will also include a few educational classes that demonstrate practical architecture choices, code organization, and modern browser-native JavaScript techniques.
