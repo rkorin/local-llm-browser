@@ -1,4 +1,4 @@
-﻿# Main.js Architecture Intent
+# Main.js Architecture Intent
 
 ## Purpose
 
@@ -176,6 +176,24 @@ Architectural rule:
 
 - presenters render and emit user intent;
 - they should not own orchestration logic.
+
+Presenter screen-state rule:
+
+- each presenter should think in explicit screens or presenter states rather than blindly reacting to every event;
+- entering a presenter screen should produce a deliberate visual update for that screen;
+- the presenter should stay subscribed to the relevant event stream, but apply incoming events only when they are relevant to the current screen;
+- this makes the presenter explainable as: current screen + incoming event -> visual change or ignore.
+
+Presenter diagnostics rule:
+
+- it should be possible to reconstruct why the UI showed a wrong state from two logs:
+  - the event log that reached the presenter;
+  - the presenter screen-state transition log;
+- therefore presenter designs should preserve the idea of:
+  - current screen name;
+  - previous screen name;
+  - which event was applied;
+  - which event was ignored because it did not belong to the current screen.
 
 ### TreeRepository
 
@@ -980,4 +998,6 @@ After the rewrite, `main.js` should ideally feel like a documentable architectur
 - start the app.
 
 If that story is readable directly from `main.js`, then the refactor is preserving the original design intent correctly.
+
+
 

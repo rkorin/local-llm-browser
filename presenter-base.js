@@ -1,4 +1,4 @@
-export class PresenterBase {
+﻿export class PresenterBase {
   constructor({ rootId, eventBus } = {}) {
     if (!rootId) {
       throw new Error("PresenterBase requires a rootId.");
@@ -15,7 +15,8 @@ export class PresenterBase {
       throw new Error(`Presenter root not found: ${rootId}`);
     }
 
-    this.unsubscribers = [];
+    this.cleanupCallbacks = [];
+    this.subscriptionSourceBase = `${this.constructor.name}:${rootId}`;
   }
 
   findById(id) {
@@ -27,12 +28,30 @@ export class PresenterBase {
   }
 
   subscribe(eventId, handler) {
-    const unsubscribe = this.eventBus.subscribe(eventId, (event) => {
+    const sourceId = `${this.subscriptionSourceBase}:${eventId}`;
+    const unsubscribe = this.eventBus.subscribe(eventId, sourceId, (event) => {
       handler(event.message, event);
     });
 
-    this.unsubscribers.push(unsubscribe);
+    this.cleanupCallbacks.push(unsubscribe);
     return unsubscribe;
+  }
+
+  subscribeMany(subscriptions) {
+    for (const subscription of subscriptions) {
+      this.subscribe(subscription.eventId, subscription.handler);
+    }
+  }
+
+  listen(target, eventName, handler, options) {
+    target.addEventListener(eventName, handler, options);
+
+    const cleanup = () => {
+      target.removeEventListener(eventName, handler, options);
+    };
+
+    this.cleanupCallbacks.push(cleanup);
+    return cleanup;
   }
 
   publish(eventId, message = null) {
@@ -42,9 +61,9 @@ export class PresenterBase {
   initialize() {}
 
   dispose() {
-    for (const unsubscribe of this.unsubscribers) {
-      unsubscribe();
+    for (const cleanup of this.cleanupCallbacks) {
+      cleanup();
     }
-    this.unsubscribers = [];
+    this.cleanupCallbacks = [];
   }
 }

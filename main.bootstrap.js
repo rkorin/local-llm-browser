@@ -1,4 +1,4 @@
-﻿import { ResourceFactory } from "./resource-factory.js";
+import { ResourceFactory } from "./resource-factory.js";
 import { ProviderFactory } from "./provider-factory.js";
 import { TreeNode } from "./model-tree-node.js";
 import { TreeRepository } from "./repository-tree.js";
@@ -217,17 +217,15 @@ function createDefaultTree() {
 }
 
 function loadTree() {
-  return treeRepository.loadRootNode();
+  eventMessageBus.publish(EventIds.treeRootReadRequested, null);
 }
 
 function saveTree() {
-  treeRepository.saveRootNode(rootNode);
+  eventMessageBus.publish(EventIds.treeRootSaveRequested, rootNode);
 }
 
 function resetKnowledgeTree() {
-  rootNode = createDefaultTree();
-  treeRepository.reset();
-  saveTree();
+  eventMessageBus.publish(EventIds.treeRootResetRequested, null);
   awaitingAnimalForNode = null;
   currentPath = [];
   setStatus(resources.status.savedTreeReset);
@@ -645,7 +643,12 @@ async function handleAnimalSubmitAction() {
 }
 
 function bindBusSubscriptions() {
-  eventMessageBus.subscribe((event) => {
+  eventMessageBus.subscribe("all", "main-bootstrap:bindings", (event) => {
+    if (event.id === EventIds.treeRootLoaded) {
+      rootNode = event.message;
+      return;
+    }
+
     if (event.id === EventIds.uiRestartRequested) {
       restartGameRound();
       return;

@@ -1,9 +1,14 @@
+import { EventIds } from "./event-ids.js";
 import { StateMachineNode } from "./state-machine-node.js";
 
+const DEFAULT_MACHINE_PUBLISH_AND_RECEIVE_TIMEOUT_MS = 5000;
+
 export class StateMachine {
-  constructor({ id, startNodeId, nodes = [], context = {}, eventBus = null } = {}) {
+  constructor({ id, startNodeId, startNode, errorNodeId, errorNode, endNodeId, endNode, nodes = [], context = {}, eventBus = null } = {}) {
     this.id = id || "state-machine";
-    this.startNodeId = startNodeId || null;
+    this.startNodeId = startNode || startNodeId || null;
+    this.errorNodeId = errorNode || errorNodeId || null;
+    this.endNodeId = endNode || endNodeId || null;
     this.context = context;
     this.eventBus = eventBus;
     this.currentNodeId = null;
@@ -11,6 +16,7 @@ export class StateMachine {
     this.nodes = new Map();
     this.eventWaiters = new Map();
     this.unsubscribeFromBus = null;
+    this.subscriptionSourceId = `StateMachine:${this.id}:all`;
 
     for (const config of nodes) {
       const node = config instanceof StateMachineNode ? config : new StateMachineNode(config);
@@ -21,10 +27,14 @@ export class StateMachine {
     }
 
     if (this.eventBus) {
-      this.unsubscribeFromBus = this.eventBus.subscribe("all", (event) => {
+      this.unsubscribeFromBus = this.eventBus.subscribe("all", this.subscriptionSourceId, (event) => {
         this.handleEvent(event);
       });
     }
+  }
+
+  hasNode(nodeId) {
+    return this.nodes.has(nodeId);
   }
 
   getNode(nodeId) {
@@ -55,8 +65,110 @@ export class StateMachine {
     });
   }
 
+  waitForEventOnce(id, sourceId, timeoutMs) {
+    if (!this.eventBus || typeof this.eventBus.subscribeOne !== "function") {
+      throw new Error(`StateMachine "${this.id}" requires an event bus with subscribeOne().`);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.eventBus.subscribeOne(
+        id,
+        sourceId,
+        timeoutMs,
+        (event) => {
+          resolve(event);
+        },
+        (error) => {
+          reject(error);
+        },
+      );
+    });
+  }
+
   waitForAnyEvent(ids) {
     return Promise.race(ids.map((id) => this.waitForEvent(id)));
+  }
+
+  waitForAnyEventOnce(ids, sourceId, timeoutMs) {
+    if (!this.eventBus || typeof this.eventBus.subscribeOne !== "function") {
+      throw new Error(`StateMachine "${this.id}" requires an event bus with subscribeOne().`);
+    }
+
+    return new Promise((resolve, reject) => {
+      const unsubscribers = [];
+      let settled = false;
+
+      const settleSuccess = (event) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        for (const unsubscribe of unsubscribers) {
+          unsubscribe();
+        }
+        resolve(event);
+      };
+
+      const settleError = (error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        for (const unsubscribe of unsubscribers) {
+          unsubscribe();
+        }
+        reject(error);
+      };
+
+      for (const id of ids) {
+        const unsubscribe = this.eventBus.subscribeOne(
+          id,
+          sourceId,
+          timeoutMs,
+          (event) => {
+            settleSuccess(event);
+          },
+          (error) => {
+            settleError(error);
+          },
+        );
+        unsubscribers.push(unsubscribe);
+      }
+    });
+  }
+
+  async publishAndReceive(
+    publishEventId,
+    receiveEventId,
+    sourceId,
+    message = null,
+    timeoutMs = DEFAULT_MACHINE_PUBLISH_AND_RECEIVE_TIMEOUT_MS,
+  ) {
+    if (!this.eventBus || typeof this.eventBus.publishAndReceive !== "function") {
+      throw new Error(`StateMachine "${this.id}" requires an event bus with publishAndReceive().`);
+    }
+
+    return this.eventBus.publishAndReceive(
+      publishEventId,
+      receiveEventId,
+      sourceId,
+      message,
+      timeoutMs,
+    );
+  }
+
+  publishTransitionEvent(previousNodeId, currentNodeId) {
+    if (!this.eventBus) {
+      return;
+    }
+
+    this.eventBus.publish(EventIds.stateMachineTransitioned, {
+      machineId: this.id,
+      previousNodeId,
+      currentNodeId,
+    });
   }
 
   async run(startNodeId = this.startNodeId) {
@@ -74,12 +186,15 @@ export class StateMachine {
     this.context.machineResult = null;
     this.isRunning = true;
     let nextNodeId = startNodeId;
+    let previousNodeId = null;
 
     while (this.isRunning && nextNodeId) {
       this.currentNodeId = nextNodeId;
+      this.publishTransitionEvent(previousNodeId, nextNodeId);
       const node = this.getNode(nextNodeId);
       const resolution = await node.nextNodeId(this.context, this);
       this.context.lastTransitionKey = resolution.transitionKey;
+      previousNodeId = nextNodeId;
       nextNodeId = resolution.nextNodeId;
     }
 

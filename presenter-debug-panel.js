@@ -15,24 +15,31 @@ export class DebugPanelPresenter extends PresenterBase {
   }
 
   initialize() {
-    this.rerunPromptButtonElement.addEventListener("click", () => {
+    this.listen(this.rerunPromptButtonElement, "click", () => {
       this.publish(EventIds.uiDebugRerunRequested, this.debugPromptInputElement.value);
     });
 
-    this.debugPromptInputElement.addEventListener("keydown", (event) => {
+    this.listen(this.debugPromptInputElement, "keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         this.publish(EventIds.uiDebugRerunRequested, this.debugPromptInputElement.value);
       }
     });
 
-    this.subscribe(EventIds.appStaticResourcesChanged, (resources) => {
-      this.renderResources(resources);
-    });
-
-    this.subscribe(EventIds.debugContextChanged, (debugContext) => {
-      this.renderDebug(debugContext);
-    });
+    this.subscribeMany([
+      {
+        eventId: EventIds.appStaticResourcesChanged,
+        handler: (resources) => {
+          this.renderResources(resources);
+        },
+      },
+      {
+        eventId: EventIds.debugContextChanged,
+        handler: (debugContext) => {
+          this.renderDebug(debugContext);
+        },
+      },
+    ]);
   }
 
   renderResources(resources) {
@@ -44,9 +51,16 @@ export class DebugPanelPresenter extends PresenterBase {
   }
 
   renderDebug(debugContext) {
-    this.rootElement.classList.toggle("hidden", !debugContext.visible);
-    this.debugStageElement.textContent = debugContext.stage;
-    this.debugPromptInputElement.value = debugContext.prompt;
-    this.debugResponseElement.textContent = debugContext.response;
+    const safeContext = debugContext || {
+      visible: false,
+      stage: "",
+      prompt: "",
+      response: "",
+    };
+
+    this.rootElement.classList.toggle("hidden", !safeContext.visible);
+    this.debugStageElement.textContent = String(safeContext.stage || "");
+    this.debugPromptInputElement.value = String(safeContext.prompt || "");
+    this.debugResponseElement.textContent = String(safeContext.response || "");
   }
 }

@@ -1,3 +1,5 @@
+const DEFAULT_TEST_TIMEOUT_MS = 4000;
+
 export function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -37,22 +39,61 @@ export function assertThrows(action, expectedMessagePart) {
   throw new Error(`Expected exception including "${expectedMessagePart}".`);
 }
 
-export function runTest(name, testFn) {
-  try {
-    testFn();
-    return { name, passed: true };
-  } catch (error) {
-    return {
-      name,
-      passed: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+function createTimeoutPromise(name, timeoutMs) {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Test timed out after ${timeoutMs} ms.`));
+    }, timeoutMs);
+  });
 }
 
-export function renderTestResults({ summaryElement, resultsElement, results }) {
+export function runTest(name, testFn) {
+  return async function executeTest() {
+    console.groupCollapsed(`[TEST START] ${name}`);
+
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => testFn()),
+        createTimeoutPromise(name, DEFAULT_TEST_TIMEOUT_MS),
+      ]);
+      console.info(`[TEST PASS] ${name}`);
+      console.groupEnd();
+      return { name, passed: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[TEST FAIL] ${name}`, error);
+      console.groupEnd();
+      return {
+        name,
+        passed: false,
+        error: message,
+      };
+    }
+  };
+}
+
+function createSummaryLine(text, className) {
+  const line = document.createElement("div");
+  line.className = className;
+  line.textContent = text;
+  return line;
+}
+
+export function renderTestResults({ summaryElement, resultsElement, results, suites = [] }) {
   const passedCount = results.filter((item) => item.passed).length;
-  summaryElement.textContent = `${passedCount}/${results.length} tests passed`;
+  summaryElement.replaceChildren(
+    createSummaryLine(`${passedCount}/${results.length} tests passed`, "summary-total"),
+  );
+
+  for (const suite of suites) {
+    const suitePassedCount = suite.results.filter((item) => item.passed).length;
+    summaryElement.append(
+      createSummaryLine(
+        `${suite.name} ${suitePassedCount} of ${suite.results.length} tests passed`,
+        "summary-suite",
+      ),
+    );
+  }
 
   resultsElement.replaceChildren();
 

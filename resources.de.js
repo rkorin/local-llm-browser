@@ -30,6 +30,7 @@ export class GermanResources {
       providers: {
         labels: {
           local: "lokaler WebLLM-Provider",
+          echo: "Echo-Provider",
           openai: "OpenAI-kompatibler Provider",
         },
         status: {
@@ -37,6 +38,8 @@ export class GermanResources {
           connectingOpenAi: "Verbindung zur OpenAI-kompatiblen API wird aufgebaut...",
         },
         errors: {
+          noProviderSelected: "Kein Provider ausgewaehlt.",
+          unknownProviderType: (providerType) => `Unbekannter Provider-Typ: ${providerType}`,
           openAiBaseUrlMissing: "Der OpenAI-kompatible Provider benoetigt apiBaseUrl.",
           openAiApiKeyMissing: "Der OpenAI-kompatible Provider benoetigt einen API-Schluessel.",
           openAiModelMissing: "Der OpenAI-kompatible Provider benoetigt apiModel.",
@@ -46,6 +49,11 @@ export class GermanResources {
       },
       status: {
         waitingToStart: "Wartet auf den Start...",
+        loadingResources: "Ressourcen werden geladen...",
+        checkingProviderStatus: "Provider-Status wird geprueft...",
+        waitingForProvider: "Warte auf den Provider...",
+        sendingHelloPrompt: "Hello-Prompt wird gesendet und auf die Antwort des Providers gewartet...",
+        readyToStartGame: "Der Provider ist bereit. Starte das Spiel, wenn du bereit bist.",
         savedTreeReset: "Der gespeicherte Baum wurde zurueckgesetzt.",
         modelReadyThinkAnimal: "Das Modell ist bereit. Denke an ein Tier und antworte mit Ja oder Nein.",
         sameAnimalDetected: "Dasselbe Tier wurde erkannt. Der Baum wurde nicht erweitert.",
@@ -71,6 +79,13 @@ export class GermanResources {
         guessedAnimalQuestion: (animalLabel) => `Ist es ${animalLabel}?`,
         userYes: "Ja",
         userNo: "Nein",
+        finished: {
+          won: "Du hast gewonnen.",
+          lost: "Du hast verloren.",
+          cancelled: "Spiel abgebrochen.",
+          invalid: "Das Spiel wurde mit einem ungueltigen Zustand beendet.",
+          closed: "Die Spielsitzung ist beendet. Druecke F5, um neu zu starten.",
+        },
       },
       ui: {
         pageTitle: "Browser LLM Demo",
@@ -81,6 +96,7 @@ export class GermanResources {
           de: "Deutsch",
         },
         restart: "Noch einmal spielen",
+        startGameButton: "Spiel starten",
         debugStageLabel: "Phase",
         debugPromptLabel: "Prompt",
         debugResponseLabel: "Rohantwort",
@@ -94,6 +110,8 @@ export class GermanResources {
         yesButton: "Ja",
         noButton: "Nein",
         saveButton: "Speichern",
+        gameTryAgainButton: "Nochmal versuchen",
+        gameCloseButton: "Spiel schliessen",
       },
       errors: {
         modelEngineNotReady: "Der LLM-Provider ist nicht bereit.",

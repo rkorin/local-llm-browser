@@ -1,4 +1,4 @@
-import { EnglishResources } from "./resources.js";
+﻿import { EnglishResources } from "./resources.js";
 import { GermanResources } from "./resources.de.js";
 import { EventIds } from "./event-ids.js";
 
@@ -13,16 +13,29 @@ const LANGUAGE_ALIASES = {
   deutsch: "de",
 };
 
+/**
+ * Loads localized static resources, picks the language, caches the result,
+ * and exposes it through globals plus the event bus.
+ *
+ * Accepts:
+ * - `app-resources-read-requested` with an optional language code or alias.
+ *
+ * Emits:
+ * - `app-static-resources-changed` with the resolved resources object.
+ */
 export class ResourceFactory {
   constructor(eventBus) {
+    if (!eventBus) {
+      throw new Error("ResourceFactory requires an event bus.");
+    }
+
     this.eventBus = eventBus;
     this.resources = null;
+    this.subscriptionSourceId = "ResourceFactory";
 
-    if (this.eventBus) {
-      this.eventBus.subscribe(EventIds.appResourcesReadRequested, (event) => {
-        this.resolveResources(event.message);
-      });
-    }
+    this.eventBus.subscribe(EventIds.appResourcesReadRequested, this.subscriptionSourceId, (event) => {
+      this.resolveResources(event.message);
+    });
   }
 
   resolveLanguage() {
@@ -58,11 +71,7 @@ export class ResourceFactory {
   resolveResources(language = this.resolveLanguage()) {
     const loadedResources = this.loadResources(language);
     this.resources = loadedResources;
-
-    if (this.eventBus) {
-      this.eventBus.publish(EventIds.appStaticResourcesChanged, loadedResources);
-    }
-
+    this.eventBus.publish(EventIds.appStaticResourcesChanged, loadedResources);
     return loadedResources;
   }
 }

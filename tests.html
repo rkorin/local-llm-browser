@@ -57,6 +57,16 @@
       font-weight: 600;
     }
 
+    .summary-total {
+      font-size: 1.05rem;
+    }
+
+    .summary-suite {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+
     .results {
       display: grid;
       gap: 12px;
@@ -99,18 +109,72 @@
 
   <script type="module">
     import { renderTestResults } from "./tests.js";
+    import { runDebugPanelPresenterTests } from "./presenter-debug-panel.tests.js";
     import { runEventMessageBusTests } from "./event-message-bus.tests.js";
+    import { runGamePresenterTests } from "./presenter-game.tests.js";
+    import { runMainPresenterTests } from "./presenter-main.tests.js";
+    import { runPresenterBaseTests } from "./presenter-base.tests.js";
+    import { runProviderEchoTests } from "./provider-echo.tests.js";
+    import { runProviderFactoryTests } from "./provider-factory.tests.js";
+    import { runProviderLocalLlmTests } from "./provider-local-llm.tests.js";
+    import { runResourceFactoryTests } from "./resource-factory.tests.js";
+    import { runTreeRepositoryTests } from "./repository-tree.tests.js";
+    import { runBootstrapStateMachineTests } from "./state-machine-bootstrap.tests.js";
+    import { runGameStateMachineTests } from "./state-machine-game.tests.js";
+    import { runStateMachineTests } from "./state-machine.tests.js";
 
     const summary = document.getElementById("summary");
     const resultsRoot = document.getElementById("results");
-    const results = [
-      ...runEventMessageBusTests(),
+    const suiteEntries = [
+      { name: "event-message-bus", run: runEventMessageBusTests },
+      { name: "resource-factory", run: runResourceFactoryTests },
+      { name: "tree-repository", run: runTreeRepositoryTests },
+      { name: "presenter-base", run: runPresenterBaseTests },
+      { name: "presenter-main", run: runMainPresenterTests },
+      { name: "presenter-game", run: runGamePresenterTests },
+      { name: "presenter-debug-panel", run: runDebugPanelPresenterTests },
+      { name: "state-machine", run: runStateMachineTests },
+      { name: "state-machine-bootstrap", run: runBootstrapStateMachineTests },
+      { name: "state-machine-game", run: runGameStateMachineTests },
+      { name: "provider-echo", run: runProviderEchoTests },
+      { name: "provider-local-llm", run: runProviderLocalLlmTests },
+      { name: "provider-factory", run: runProviderFactoryTests },
     ];
 
-    renderTestResults({
-      summaryElement: summary,
-      resultsElement: resultsRoot,
-      results,
+    async function main() {
+      const suites = [];
+
+      for (const suiteEntry of suiteEntries) {
+        console.group(`[SUITE START] ${suiteEntry.name}`);
+        const testExecutors = suiteEntry.run();
+        const suiteResults = [];
+
+        for (const executeTest of testExecutors) {
+          suiteResults.push(await executeTest());
+        }
+
+        suites.push({
+          name: suiteEntry.name,
+          results: suiteResults,
+        });
+        console.info(`[SUITE END] ${suiteEntry.name}`, suiteResults);
+        console.groupEnd();
+      }
+
+      const results = suites.flatMap((suite) => suite.results);
+
+      renderTestResults({
+        summaryElement: summary,
+        resultsElement: resultsRoot,
+        results,
+        suites,
+      });
+    }
+
+    main().catch((error) => {
+      console.error("[TEST RUNNER FATAL]", error);
+      summary.textContent = `Test runner failed: ${error instanceof Error ? error.message : String(error)}`;
+      resultsRoot.replaceChildren();
     });
   </script>
 </body>

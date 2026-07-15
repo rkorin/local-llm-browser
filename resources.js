@@ -30,6 +30,7 @@ export class EnglishResources {
       providers: {
         labels: {
           local: "local WebLLM provider",
+          echo: "echo provider",
           openai: "OpenAI-compatible provider",
         },
         status: {
@@ -37,6 +38,8 @@ export class EnglishResources {
           connectingOpenAi: "Connecting to the OpenAI-compatible API...",
         },
         errors: {
+          noProviderSelected: "No provider selected.",
+          unknownProviderType: (providerType) => `Unknown provider type: ${providerType}`,
           openAiBaseUrlMissing: "OpenAI-compatible provider requires apiBaseUrl.",
           openAiApiKeyMissing: "OpenAI-compatible provider requires an API key.",
           openAiModelMissing: "OpenAI-compatible provider requires apiModel.",
@@ -46,6 +49,11 @@ export class EnglishResources {
       },
       status: {
         waitingToStart: "Waiting to start...",
+        loadingResources: "Loading resources...",
+        checkingProviderStatus: "Checking provider status...",
+        waitingForProvider: "Waiting for provider...",
+        sendingHelloPrompt: "Sending hello prompt and waiting for the provider response...",
+        readyToStartGame: "The provider is ready. Start the game when you are ready.",
         savedTreeReset: "The saved tree was reset.",
         modelReadyThinkAnimal: "The model is ready. Think of an animal and answer with yes or no.",
         sameAnimalDetected: "Same animal detected. The tree was not expanded.",
@@ -71,6 +79,13 @@ export class EnglishResources {
         guessedAnimalQuestion: (animalLabel) => `Is it ${animalLabel}?`,
         userYes: "Yes",
         userNo: "No",
+        finished: {
+          won: "You won.",
+          lost: "You lost.",
+          cancelled: "Game cancelled.",
+          invalid: "Game finished with an invalid state.",
+          closed: "The game session is closed. Press F5 to start again.",
+        },
       },
       ui: {
         pageTitle: "Browser LLM Demo",
@@ -81,6 +96,7 @@ export class EnglishResources {
           de: "Deutsch",
         },
         restart: "Let's play again",
+        startGameButton: "Start Game",
         debugStageLabel: "Stage",
         debugPromptLabel: "Prompt",
         debugResponseLabel: "Raw Response",
@@ -94,6 +110,8 @@ export class EnglishResources {
         yesButton: "Yes",
         noButton: "No",
         saveButton: "Save",
+        gameTryAgainButton: "Try Again",
+        gameCloseButton: "Close Game",
       },
       errors: {
         modelEngineNotReady: "The LLM provider is not ready.",

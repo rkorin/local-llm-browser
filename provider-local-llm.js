@@ -9,6 +9,7 @@ export class ProviderLocalLlm extends ProviderBase {
     this.modelUrl = config.modelUrl;
     this.modelLibUrl = config.modelLibUrl;
     this.messages = config.messages;
+    this.webllmModule = config.webllmModule || webllm;
     this.engine = null;
   }
 
@@ -33,7 +34,7 @@ export class ProviderLocalLlm extends ProviderBase {
       ],
     };
 
-    this.engine = await webllm.CreateMLCEngine(this.modelId, {
+    this.engine = await this.webllmModule.CreateMLCEngine(this.modelId, {
       appConfig,
       initProgressCallback: (progress) => {
         onProgress?.(progress);

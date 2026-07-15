@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -32,6 +32,7 @@
       </div>
       <div class="status" id="status-text">Waiting to start...</div>
       <div class="status-actions">
+        <button type="button" class="debug-toggle hidden" id="start-game-button">Start Game</button>
         <button type="button" class="debug-toggle" id="debug-toggle-button">Debug</button>
         <button type="button" class="debug-toggle danger-button" id="reset-tree-button">Reset Base</button>
       </div>
@@ -70,6 +71,7 @@
       </div>
       <div class="choice-row restart hidden" id="restart-row">
         <button type="button" class="restart-button" id="restart-button">Let's play again</button>
+        <button type="button" class="debug-toggle danger-button" id="close-game-button">Close Game</button>
       </div>
     </section>
   </main>
@@ -77,5 +79,3 @@
   <script type="module" src="./main.js"></script>
 </body>
 </html>
-
-
