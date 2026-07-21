@@ -1,14 +1,51 @@
 import { EventIds } from "./event-ids.js";
 import { PresenterBase } from "./presenter-base.js";
 
+const GAME_MACHINE_ID = "game-state-machine";
+const STEP_START_ROUND = "step-1-start-round";
+const STEP_REQUEST_USER_ANIMAL = "step-7-request-user-animal";
+const SCREEN_HIDDEN = "hidden";
+const SCREEN_START = "start";
+const SCREEN_CHOICE = "choice";
+const SCREEN_INPUT = "input";
+const SCREEN_RESTART = "restart";
+const SCREEN_CLOSED = "closed";
+
 /**
- * Game presenter owns the game panel and renders gameplay plus post-game result screens.
+ * Game presenter owns the game panel and reacts to explicit gameplay screens.
+ *
+ * Screens:
+ * - `hidden`
+ *   initial idle state before a round starts.
+ *
+ * - `start`
+ *   entered from `state-machine-transitioned(step-1-start-round)`.
+ *   clears chat and appends exactly one intro message.
+ *
+ * - `choice`
+ *   entered from `game-question-asked`.
+ *   appends one game question and shows Yes/No actions.
+ *
+ * - `input`
+ *   entered from `state-machine-transitioned(step-7-request-user-animal)`, `game-interaction-state-changed(input)`, or legacy `game-context-changed(input)`.
+ *   appends the loss/input prompt messages and shows the animal input form.
+ *
+ * - `restart`
+ *   shows retry/close controls after `game-finished`.
+ *
+ * - `closed`
+ *   shows a static closed message after `game-closed`.
  *
  * Accepts:
- * - `app-static-resources-changed` updates localized button labels and result texts.
- * - `game-context-changed` renders the active gameplay screen (`choice`, `input`, or `restart`).
- * - `game-finished` shows the game result screen with retry/close actions.
- * - `game-closed` clears the game panel into a static closed state that tells the user to press F5.
+ * - `app-static-resources-changed` updates localized button labels and game copy.
+ * - `state-machine-transitioned` for `game-state-machine` drives presenter screens.
+ * - `game-chat-cleared` clears the visible chat log.
+ * - `game-chat-message-added` appends one new chat bubble without rerendering older items.
+ * - `game-question-asked` appends one question bubble and shows Yes/No actions.
+ * - `game-interaction-state-changed` keeps backward compatibility for explicit mode switches.
+ * - `game-context-changed` keeps backward compatibility with the legacy full-context flow.
+ * - `game-finished` shows the post-game result screen with retry/close actions.
+ * - `game-closed` clears the panel into a static closed state.
  *
  * Emits:
  * - `ui-choice-yes` when the yes button is clicked.
@@ -32,9 +69,15 @@ export class GamePresenter extends PresenterBase {
     this.restartButtonElement = this.findById("restart-button");
     this.closeGameButtonElement = this.findById("close-game-button");
     this.resources = null;
+    this.currentScreen = SCREEN_HIDDEN;
+    this.initialize();
   }
 
   initialize() {
+    if (!this.beginInitialize()) {
+      return;
+    }
+
     this.listen(this.yesButtonElement, "click", () => {
       this.publish(EventIds.uiChoiceYes, null);
     });
@@ -70,6 +113,36 @@ export class GamePresenter extends PresenterBase {
         },
       },
       {
+        eventId: EventIds.stateMachineTransitioned,
+        handler: (message) => {
+          this.handleStateMachineTransition(message);
+        },
+      },
+      {
+        eventId: EventIds.gameChatCleared,
+        handler: () => {
+          this.clearChat();
+        },
+      },
+      {
+        eventId: EventIds.gameChatMessageAdded,
+        handler: (message) => {
+          this.appendChatMessage(message);
+        },
+      },
+      {
+        eventId: EventIds.gameQuestionAsked,
+        handler: (message) => {
+          this.handleGameQuestionAsked(message);
+        },
+      },
+      {
+        eventId: EventIds.gameInteractionStateChanged,
+        handler: (message) => {
+          this.renderInteractionState(message);
+        },
+      },
+      {
         eventId: EventIds.gameContextChanged,
         handler: (gameContext) => {
           this.renderGame(gameContext);
@@ -83,8 +156,8 @@ export class GamePresenter extends PresenterBase {
       },
       {
         eventId: EventIds.gameClosed,
-        handler: (message) => {
-          this.renderGameClosed(message);
+        handler: () => {
+          this.renderGameClosed();
         },
       },
     ]);
@@ -101,46 +174,132 @@ export class GamePresenter extends PresenterBase {
     this.animalInputElement.placeholder = resources.ui.animalInputPlaceholder;
   }
 
-  renderGame(gameContext) {
-    const safeContext = gameContext || { visible: false, mode: "hidden", chat: [] };
+  handleStateMachineTransition(message) {
+    if (message?.machineId !== GAME_MACHINE_ID) {
+      return;
+    }
 
-    this.rootElement.classList.toggle("hidden", !safeContext.visible);
-    this.renderChat(safeContext.chat || []);
+    const stepId = String(message?.currentNodeId || "");
+    if (stepId === STEP_START_ROUND) {
+      this.renderStartRoundScreen();
+      return;
+    }
 
-    this.choiceRowElement.classList.toggle("hidden", safeContext.mode !== "choice");
-    this.inputRowElement.classList.toggle("hidden", safeContext.mode !== "input");
-    this.restartRowElement.classList.toggle("hidden", true);
+    if (stepId === STEP_REQUEST_USER_ANIMAL) {
+      this.renderRequestUserAnimalScreen();
+    }
+  }
 
-    if (safeContext.mode === "input") {
+  handleGameQuestionAsked(message) {
+    this.appendChatMessage({
+      role: String(message?.role || "game"),
+      message: String(message?.text || ""),
+    });
+    this.enterScreen(SCREEN_CHOICE);
+  }
+
+  renderInteractionState(message) {
+    const nextMode = String(message?.mode || SCREEN_HIDDEN);
+    this.enterScreen(nextMode);
+  }
+
+  enterScreen(screen) {
+    this.currentScreen = screen;
+    const isVisible = screen !== SCREEN_HIDDEN;
+
+    this.rootElement.classList.toggle("hidden", !isVisible);
+    this.choiceRowElement.classList.toggle("hidden", screen !== SCREEN_CHOICE);
+    this.inputRowElement.classList.toggle("hidden", screen !== SCREEN_INPUT);
+    this.restartRowElement.classList.toggle("hidden", screen !== SCREEN_RESTART);
+
+    if (screen === SCREEN_INPUT) {
       this.animalInputElement.value = "";
       this.animalInputElement.focus();
     }
   }
 
-  renderGameFinished(message) {
-    this.rootElement.classList.remove("hidden");
-    this.choiceRowElement.classList.add("hidden");
-    this.inputRowElement.classList.add("hidden");
-    this.restartRowElement.classList.remove("hidden");
-    this.renderChat([
-      {
-        role: "game",
-        message: this.finishedMessage(message?.result),
-      },
-    ]);
+  clearChat() {
+    this.chatLogElement.textContent = "";
   }
 
-  renderGameClosed(_message) {
+  appendChatMessage(item) {
+    const role = String(item?.role || "game");
+    const message = String(item?.message || "");
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role}`;
+    bubble.textContent = message;
+    this.chatLogElement.appendChild(bubble);
+    this.chatLogElement.scrollTop = this.chatLogElement.scrollHeight;
+  }
+
+  renderStartRoundScreen() {
+    this.enterScreen(SCREEN_START);
+    this.clearChat();
+    this.appendChatMessage({
+      role: "game",
+      message: this.startRoundMessage(),
+    });
+  }
+
+  renderRequestUserAnimalScreen() {
+    this.appendChatMessage({
+      role: "game",
+      message: this.roundLostMessage(),
+    });
+    this.appendChatMessage({
+      role: "game",
+      message: this.requestAnimalMessage(),
+    });
+    this.enterScreen(SCREEN_INPUT);
+  }
+
+  renderGame(gameContext) {
+    const safeContext = gameContext || { visible: false, mode: SCREEN_HIDDEN, chat: [] };
+    this.clearChat();
+    for (const item of safeContext.chat || []) {
+      this.appendChatMessage(item);
+    }
+
+    if (!safeContext.visible) {
+      this.enterScreen(SCREEN_HIDDEN);
+      return;
+    }
+
+    this.enterScreen(String(safeContext.mode || SCREEN_CHOICE));
+  }
+
+  renderGameFinished(message) {
+    this.enterScreen(SCREEN_RESTART);
+    this.clearChat();
+    this.appendChatMessage({
+      role: "game",
+      message: this.finishedMessage(message?.result),
+    });
+  }
+
+  renderGameClosed() {
+    this.currentScreen = SCREEN_CLOSED;
     this.rootElement.classList.remove("hidden");
     this.choiceRowElement.classList.add("hidden");
     this.inputRowElement.classList.add("hidden");
     this.restartRowElement.classList.add("hidden");
-    this.renderChat([
-      {
-        role: "game",
-        message: this.closedMessage(),
-      },
-    ]);
+    this.clearChat();
+    this.appendChatMessage({
+      role: "game",
+      message: this.closedMessage(),
+    });
+  }
+
+  startRoundMessage() {
+    return this.resources?.game?.messages?.roundStarted || "Let us play. Think of an animal and I will try to guess it.";
+  }
+
+  roundLostMessage() {
+    return this.resources?.game?.finished?.lost || "You lost.";
+  }
+
+  requestAnimalMessage() {
+    return this.resources?.game?.messages?.lostAskAnimal || "I did not guess it. Which animal did you choose?";
   }
 
   finishedMessage(result) {
@@ -152,18 +311,5 @@ export class GamePresenter extends PresenterBase {
 
   closedMessage() {
     return this.resources?.game?.finished?.closed || "The game session is closed. Press F5 to start again.";
-  }
-
-  renderChat(chatItems) {
-    this.chatLogElement.textContent = "";
-
-    for (const item of chatItems) {
-      const bubble = document.createElement("div");
-      bubble.className = `bubble ${item.role}`;
-      bubble.textContent = String(item.message);
-      this.chatLogElement.appendChild(bubble);
-    }
-
-    this.chatLogElement.scrollTop = this.chatLogElement.scrollHeight;
   }
 }

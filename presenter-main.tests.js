@@ -81,7 +81,6 @@ export function runMainPresenterTests() {
   return [
     runTest("presenter-main-001 resource event updates main labels", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
 
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
@@ -98,7 +97,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-002 provider progress updates status text and normalizes percent on provider screens", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
         machineId: "bootstrap-state-machine",
@@ -120,7 +118,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-003 provider verify and wait steps share one visual screen without resetting progress text", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
         machineId: "bootstrap-state-machine",
@@ -152,7 +149,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-004 send-provider-healthcheck is a separate screen with complete progress while waiting for hello response", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
@@ -169,7 +165,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-005 provider progress does not override unrelated screens", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
         machineId: "bootstrap-state-machine",
@@ -191,7 +186,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-006 provider completion renders loaded state only during healthcheck screen", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
         machineId: "bootstrap-state-machine",
@@ -211,7 +205,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-007 provider failure renders error state", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
       fixture.eventBus.publish(EventIds.providerInitializeFailed, {
@@ -228,7 +221,6 @@ export function runMainPresenterTests() {
 
     runTest("presenter-main-008 bootstrap wait-for-user-game-start shows start button and publishes uiRestartRequested", async () => {
       const fixture = createMainPresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
       let publishedEvent = null;

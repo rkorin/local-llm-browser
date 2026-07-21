@@ -1,6 +1,8 @@
 import { EventIds } from "./event-ids.js";
 import { EventMessageBus } from "./event-message-bus.js";
-import { createGameStateMachine } from "./state-machine-game.js";
+import { TreeNode } from "./model-tree-node.js";
+import { StateMachine } from "./state-machine.js";
+import { getGameStateMachineDefinition } from "./state-machine-game.js";
 import {
   assertArrayEqual,
   assertEqual,
@@ -13,67 +15,143 @@ function waitForMicrotask() {
   });
 }
 
+function wireTreeRepositoryMock(eventBus, rootNode) {
+  eventBus.subscribe(EventIds.treeRootReadRequested, `test:tree-read:${Math.random()}`, () => {
+    eventBus.publish(EventIds.treeRootLoaded, rootNode);
+  });
+
+  eventBus.subscribe(EventIds.treeNodeReplaceRequested, `test:tree-replace:${Math.random()}`, (event) => {
+    const message = event.message;
+    eventBus.publish(EventIds.treeNodeReplaced, new TreeNode({
+      question: message.question,
+      yesNode: new TreeNode({ name: message.yesAnimalName }),
+      noNode: new TreeNode({ name: message.noAnimalName }),
+    }));
+  });
+}
+
+function wireLlmMock(eventBus, overrides = {}) {
+  eventBus.subscribe(EventIds.llmRequestRequested, `test:llm:${Math.random()}`, (event) => {
+    const prompt = String(event.message || "");
+
+    if (prompt.includes("USER_INPUT")) {
+      if (typeof overrides.handleValidateAnimalPrompt === "function") {
+        overrides.handleValidateAnimalPrompt(prompt, eventBus);
+        return;
+      }
+
+      eventBus.publish(EventIds.llmResponseReceived, {
+        providerType: "echo",
+        prompt,
+        response: JSON.stringify({
+          isValid: true,
+          normalizedAnimal: "whale",
+          reasonCode: "valid",
+        }),
+      });
+      return;
+    }
+
+    eventBus.publish(EventIds.llmResponseReceived, {
+      providerType: "echo",
+      prompt,
+      response: JSON.stringify({}),
+    });
+  });
+}
+
+function createGameMachine(context) {
+  return new StateMachine(
+    context.eventBus,
+    (machineContext) => {
+      Object.assign(machineContext, context);
+      return getGameStateMachineDefinition(machineContext);
+    },
+  );
+}
+
 function createGameContext(overrides = {}) {
   const callLog = [];
-  const eventBus = new EventMessageBus();
-  const context = {
+  const eventBus = overrides.eventBus || new EventMessageBus();
+  const rootNode = overrides.rootNode || new TreeNode({ id: 1, name: "cat" });
+  wireTreeRepositoryMock(eventBus, rootNode);
+  wireLlmMock(eventBus, overrides);
+
+  return {
     callLog,
     eventBus,
-    startRoundState() {
-      callLog.push("start-round");
+    resources: {
+      prompts: {
+        game: {
+          validateAnimalInput: (failedAnimalName, userInput) => `FAILED_ANIMAL_NAME=${failedAnimalName}; USER_INPUT=${userInput}`,
+        },
+      },
     },
-    renderCurrentNodeState() {
-      callLog.push("render-current-node");
-      return "choice";
+    rootNode: null,
+    currentNode: null,
+    invalidAnimalDelayMs: 0,
+    generateDistinguishingQuestion() {
+      callLog.push(`generate-question:${this.questionGenerationAttemptCount}`);
+      this.generatedQuestion = "Does it live in water?";
+      this.generatedQuestionYesAnimal = "whale";
+      this.generatedQuestionNoAnimal = "cat";
+      return {
+        question: this.generatedQuestion,
+        yesAnimal: this.generatedQuestionYesAnimal,
+        noAnimal: this.generatedQuestionNoAnimal,
+      };
     },
-    async handleYesAction() {
-      callLog.push("handle-yes");
-      return "won";
-    },
-    async handleNoAction() {
-      callLog.push("handle-no");
-      return "ask_animal";
-    },
-    prepareAnimalInput() {
-      callLog.push("prepare-animal-input");
-    },
-    async handleAnimalSubmitAction() {
-      callLog.push("handle-animal-submit");
-      return "lost";
+    validateGeneratedQuestion() {
+      callLog.push("validate-generated-question");
+      return "valid";
     },
     ...overrides,
   };
-
-  return context;
 }
 
 export function runGameStateMachineTests() {
   return [
-    // state-machine-game-001: yes choice path reaches the won terminal state
-    runTest("state-machine-game-001 yes choice path reaches the won terminal state", async () => {
+    runTest("state-machine-game-001 root animal guess emits one question event and reaches won on yes", async () => {
       const context = createGameContext();
-      const machine = createGameStateMachine(context);
+      const machine = createGameMachine(context);
+      const published = [];
+      context.eventBus.subscribe("all", "test:game-events:001", (event) => {
+        published.push(event);
+      });
       const runPromise = machine.run();
 
       await waitForMicrotask();
       context.eventBus.publish(EventIds.uiChoiceYes, null);
       const result = await runPromise;
 
+      const questionEvents = published.filter((event) => event.id === EventIds.gameQuestionAsked);
+
+      assertEqual(questionEvents.length, 1, "Game state machine should publish exactly one question event for an animal guess");
+      assertEqual(questionEvents[0].message.kind, "yes-no-question", "Game state machine should mark the question as a yes/no question");
+      assertEqual(questionEvents[0].message.text, "Is it cat?", "Game state machine should publish the animal guess question text");
       assertArrayEqual(
         context.callLog,
-        ["start-round", "render-current-node", "handle-yes"],
-        "Game state machine should execute the yes branch in order",
+        [],
+        "Game state machine should not call extra context functions during a winning animal guess",
       );
-      assertEqual(result.status, "won", "Game state machine should end with won status after a winning yes branch");
-      assertEqual(context.machineResult, "won", "Game state machine should store won as machineResult");
+      assertEqual(result.status, "won", "Game state machine should end with won status after a winning animal guess");
+      assertEqual(context.currentNode.name, "cat", "Game state machine should keep the current node on the guessed animal when the answer is yes");
+      assertEqual(context.gameResultForParentSm, "won", "Game state machine should store the won result for the parent state machine");
     }),
 
-    // state-machine-game-002: no choice path can collect an animal and end as lost
-    runTest("state-machine-game-002 no choice path can collect an animal and end as lost", async () => {
-      const context = createGameContext();
-      const machine = createGameStateMachine(context);
+    runTest("state-machine-game-002 question branch can traverse and then learn a new animal", async () => {
+      const rootNode = new TreeNode({
+        id: 10,
+        question: "Does it fly?",
+        yesNode: new TreeNode({ id: 11, name: "eagle" }),
+        noNode: new TreeNode({ id: 12, name: "cat" }),
+      });
+      const context = createGameContext({ rootNode });
+      const machine = createGameMachine(context);
       const runPromise = machine.run();
 
+      await waitForMicrotask();
+      context.eventBus.publish(EventIds.uiChoiceNo, null);
       await waitForMicrotask();
       context.eventBus.publish(EventIds.uiChoiceNo, null);
       await waitForMicrotask();
@@ -83,82 +161,98 @@ export function runGameStateMachineTests() {
       assertArrayEqual(
         context.callLog,
         [
-          "start-round",
-          "render-current-node",
-          "handle-no",
-          "prepare-animal-input",
-          "handle-animal-submit",
+          "generate-question:1",
+          "validate-generated-question",
         ],
-        "Game state machine should execute the animal-learning branch in order",
+        "Game state machine should traverse a question node, validate the animal, and continue learning",
       );
       assertEqual(result.status, "lost", "Game state machine should end with lost status after learning a new animal");
-      assertEqual(context.machineResult, "lost", "Game state machine should store lost as machineResult");
+      assertEqual(context.failedAnimalNodeId, 12, "Game state machine should remember the failed animal node id for learning");
+      assertEqual(context.userAnimalInput, "whale", "Game state machine should store the user animal input at step 7");
+      assertEqual(context.userAnimalName, "whale", "Game state machine should store the normalized user animal name after step 8");
+      assertEqual(context.rootNode.question, "Does it live in water?", "Game state machine should keep the replaced root from the repository response");
     }),
 
-    // state-machine-game-003: cancel during choice wait ends the round as cancelled
-    runTest("state-machine-game-003 cancel during choice wait ends the round as cancelled", async () => {
-      const context = createGameContext();
-      const machine = createGameStateMachine(context);
-      const runPromise = machine.run();
+    runTest("state-machine-game-003 invalid current node still throws a clear error", async () => {
+      const rootNode = {
+        isAnimalNode() {
+          return false;
+        },
+      };
+      const context = createGameContext({ rootNode });
+      const machine = createGameMachine(context);
 
-      await waitForMicrotask();
-      context.eventBus.publish(EventIds.gameCancel, null);
-      const result = await runPromise;
+      let actualMessage = "";
+      try {
+        await machine.run();
+      } catch (error) {
+        actualMessage = error instanceof Error ? error.message : String(error);
+      }
 
+      assertEqual(actualMessage, "Cannot read properties of undefined (reading 'question')", "Game state machine should fail loudly when root node does not respect the TreeNode contract");
       assertArrayEqual(
         context.callLog,
-        ["start-round", "render-current-node"],
-        "Game state machine should stop before yes or no handlers when the round is cancelled from the choice wait",
+        [],
+        "Game state machine should not ask gameplay questions when the root node is structurally invalid",
       );
-      assertEqual(result.status, "cancelled", "Game state machine should end with cancelled status when gameCancel arrives in choice wait");
-      assertEqual(context.machineResult, "cancelled", "Game state machine should store cancelled as machineResult");
     }),
 
-    // state-machine-game-004: invalid render branch ends immediately as invalid
-    runTest("state-machine-game-004 invalid render branch ends immediately as invalid", async () => {
+    runTest("state-machine-game-004 invalid animal input loops back to step 7 before succeeding", async () => {
+      let validateAnimalCalls = 0;
       const context = createGameContext({
-        renderCurrentNodeState() {
-          context.callLog.push("render-current-node");
-          return "invalid";
+        generatedCalls: 0,
+        handleValidateAnimalPrompt(prompt, eventBus) {
+          validateAnimalCalls += 1;
+          if (validateAnimalCalls === 1) {
+            eventBus.publish(EventIds.llmResponseReceived, {
+              providerType: "echo",
+              prompt,
+              response: JSON.stringify({
+                isValid: false,
+                normalizedAnimal: "",
+                reasonCode: "not_an_animal",
+              }),
+            });
+            return;
+          }
+
+          eventBus.publish(EventIds.llmResponseReceived, {
+            providerType: "echo",
+            prompt,
+            response: JSON.stringify({
+              isValid: true,
+              normalizedAnimal: "whale",
+              reasonCode: "valid",
+            }),
+          });
         },
-      });
-      const machine = createGameStateMachine(context);
-
-      const result = await machine.run();
-
-      assertArrayEqual(
-        context.callLog,
-        ["start-round", "render-current-node"],
-        "Game state machine should not enter wait states when render returns invalid",
-      );
-      assertEqual(result.status, "invalid", "Game state machine should end with invalid status when render returns invalid");
-      assertEqual(context.machineResult, "invalid", "Game state machine should store invalid as machineResult");
-    }),
-
-    // state-machine-game-005: retry after invalid animal input loops back to animal prompt
-    runTest("state-machine-game-005 retry after invalid animal input loops back to animal prompt", async () => {
-      const context = createGameContext({
-        async handleNoAction() {
-          context.callLog.push("handle-no");
-          return "ask_animal";
+        generateDistinguishingQuestion() {
+          this.generatedCalls += 1;
+          this.callLog.push(`generate-question:${this.generatedCalls}`);
+          this.generatedQuestion = this.generatedCalls === 1 ? "Does it purr?" : "Does it live in water?";
+          this.generatedQuestionYesAnimal = "whale";
+          this.generatedQuestionNoAnimal = "cat";
+          return {
+            question: this.generatedQuestion,
+            yesAnimal: this.generatedQuestionYesAnimal,
+            noAnimal: this.generatedQuestionNoAnimal,
+          };
         },
-        async handleAnimalSubmitAction() {
-          context.callLog.push("handle-animal-submit-retry");
-          if (!context.hasRetried) {
-            context.hasRetried = true;
+        validateGeneratedQuestion() {
+          this.callLog.push("validate-generated-question");
+          if (this.generatedCalls === 1) {
             return "retry";
           }
-          context.callLog.push("handle-animal-submit-lost");
-          return "lost";
+          return "valid";
         },
       });
-      const machine = createGameStateMachine(context);
+      const machine = createGameMachine(context);
       const runPromise = machine.run();
 
       await waitForMicrotask();
       context.eventBus.publish(EventIds.uiChoiceNo, null);
       await waitForMicrotask();
-      context.eventBus.publish(EventIds.uiAnimalSubmit, "???");
+      context.eventBus.publish(EventIds.uiAnimalSubmit, "??");
       await waitForMicrotask();
       context.eventBus.publish(EventIds.uiAnimalSubmit, "whale");
       const result = await runPromise;
@@ -166,18 +260,17 @@ export function runGameStateMachineTests() {
       assertArrayEqual(
         context.callLog,
         [
-          "start-round",
-          "render-current-node",
-          "handle-no",
-          "prepare-animal-input",
-          "handle-animal-submit-retry",
-          "prepare-animal-input",
-          "handle-animal-submit-retry",
-          "handle-animal-submit-lost",
+          "generate-question:1",
+          "validate-generated-question",
+          "generate-question:2",
+          "validate-generated-question",
         ],
-        "Game state machine should re-enter the animal prompt after a retry transition",
+        "Game state machine should retry invalid animal input and retry question generation after a failed validation",
       );
-      assertEqual(result.status, "lost", "Game state machine should still reach lost after a retry loop completes");
+      assertEqual(result.status, "lost", "Game state machine should still end as lost after learning completes through retries");
+      assertEqual(context.questionGenerationAttemptCount, 2, "Game state machine should track how many question-generation attempts were used");
+      assertEqual(context.userAnimalInput, "whale", "Game state machine should keep the latest submitted animal input in context data");
+      assertEqual(context.userAnimalValidationError, null, "Game state machine should clear the validation error after a valid retry");
     }),
   ];
 }

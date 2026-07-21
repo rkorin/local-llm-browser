@@ -1,4 +1,4 @@
-﻿export class PresenterBase {
+export class PresenterBase {
   constructor({ rootId, eventBus } = {}) {
     if (!rootId) {
       throw new Error("PresenterBase requires a rootId.");
@@ -17,6 +17,7 @@
 
     this.cleanupCallbacks = [];
     this.subscriptionSourceBase = `${this.constructor.name}:${rootId}`;
+    this.isInitialized = false;
   }
 
   findById(id) {
@@ -56,6 +57,15 @@
 
   publish(eventId, message = null) {
     this.eventBus.publish(eventId, message);
+  }
+
+  beginInitialize() {
+    if (this.isInitialized) {
+      return false;
+    }
+
+    this.isInitialized = true;
+    return true;
   }
 
   initialize() {}

@@ -13,9 +13,11 @@ import { TreeNode } from "./model-tree-node.js";
  * - `tree-root-read-requested` to restore the root `TreeNode` from storage and cache it locally.
  * - `tree-root-save-requested` with the root `TreeNode`; saves that root node and all children to storage.
  * - `tree-root-reset-requested` to clear storage, restore the default root node, and cache it locally.
+ * - `tree-node-replace-requested` with a target animal node id plus a new question payload.
  *
  * Emits:
  * - `tree-root-loaded` with the current root `TreeNode` after read or reset.
+ * - `tree-node-replaced` with the updated root `TreeNode` after a learning replacement.
  */
 export class TreeRepository {
   constructor({ eventBus, storageKey, storage = globalThis.localStorage } = {}) {
@@ -43,6 +45,9 @@ export class TreeRepository {
     this.eventBus.subscribe(EventIds.treeRootResetRequested, "TreeRepository:reset", () => {
       this.handleResetRequested();
     });
+    this.eventBus.subscribe(EventIds.treeNodeReplaceRequested, "TreeRepository:replace", (event) => {
+      this.handleReplaceRequested(event.message);
+    });
   }
 
   readRawRootNode() {
@@ -59,9 +64,17 @@ export class TreeRepository {
     }
   }
 
+  persistRootNode(rootNode) {
+    this.rootNode = rootNode;
+    TreeNode.syncNextNodeId(rootNode);
+    this.storage.setItem(this.storageKey, JSON.stringify(rootNode.serializeGraph()));
+    return rootNode;
+  }
+
   handleReadRequested() {
     const loadedRootNode = this.readRawRootNode();
     this.rootNode = loadedRootNode;
+    TreeNode.syncNextNodeId(loadedRootNode);
     this.eventBus.publish(EventIds.treeRootLoaded, loadedRootNode);
     return loadedRootNode;
   }
@@ -71,16 +84,44 @@ export class TreeRepository {
       throw new Error("TreeRepository tree-root-save-requested requires a TreeNode root.");
     }
 
-    this.rootNode = rootNode;
-    this.storage.setItem(this.storageKey, JSON.stringify(rootNode.serializeGraph()));
-    return rootNode;
+    return this.persistRootNode(rootNode);
   }
 
   handleResetRequested() {
     const defaultRootNode = TreeNode.createDefault();
     this.storage.removeItem(this.storageKey);
     this.rootNode = defaultRootNode;
+    TreeNode.syncNextNodeId(defaultRootNode);
     this.eventBus.publish(EventIds.treeRootLoaded, defaultRootNode);
     return defaultRootNode;
+  }
+
+  handleReplaceRequested(payload) {
+    const targetNodeId = TreeNode.normalizeNodeId(payload?.targetNodeId);
+    const question = String(payload?.question || "").trim();
+    const yesAnimalName = String(payload?.yesAnimalName || "").trim();
+    const noAnimalName = String(payload?.noAnimalName || "").trim();
+
+    if (targetNodeId === null) {
+      throw new Error("TreeRepository tree-node-replace-requested requires targetNodeId.");
+    }
+    if (!question) {
+      throw new Error("TreeRepository tree-node-replace-requested requires question.");
+    }
+    if (!yesAnimalName || !noAnimalName) {
+      throw new Error("TreeRepository tree-node-replace-requested requires yesAnimalName and noAnimalName.");
+    }
+
+    const currentRootNode = this.rootNode || this.readRawRootNode();
+    const replacementNode = new TreeNode({
+      question,
+      yesNode: new TreeNode({ name: yesAnimalName }),
+      noNode: new TreeNode({ name: noAnimalName }),
+    });
+    const nextRootNode = currentRootNode.replaceNodeById(targetNodeId, replacementNode);
+
+    this.persistRootNode(nextRootNode);
+    this.eventBus.publish(EventIds.treeNodeReplaced, nextRootNode);
+    return nextRootNode;
   }
 }

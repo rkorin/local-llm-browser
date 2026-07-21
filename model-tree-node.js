@@ -1,14 +1,57 @@
-function createNodeId() {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
+function normalizeNodeId(value) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
   }
 
-  return `node-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 export class TreeNode {
-  constructor({ id = createNodeId(), question = "", name = "", yesNode = null, noNode = null } = {}) {
-    this.id = id;
+  static nextNodeId = 1;
+
+  static claimNodeId(value) {
+    const normalizedId = normalizeNodeId(value);
+    if (normalizedId === null) {
+      return null;
+    }
+
+    TreeNode.nextNodeId = Math.max(TreeNode.nextNodeId, normalizedId + 1);
+    return normalizedId;
+  }
+
+  static createNextNodeId() {
+    const nextId = TreeNode.nextNodeId;
+    TreeNode.nextNodeId += 1;
+    return nextId;
+  }
+
+  static syncNextNodeId(rootNode) {
+    let maxNodeId = 0;
+
+    rootNode?.traverseDepthFirst((node) => {
+      const normalizedId = normalizeNodeId(node?.id);
+      if (normalizedId !== null) {
+        maxNodeId = Math.max(maxNodeId, normalizedId);
+      }
+    });
+
+    TreeNode.nextNodeId = Math.max(TreeNode.nextNodeId, maxNodeId + 1);
+    return TreeNode.nextNodeId;
+  }
+
+  static normalizeNodeId(value) {
+    return normalizeNodeId(value);
+  }
+
+  constructor({ id, question = "", name = "", yesNode = null, noNode = null } = {}) {
+    this.id = TreeNode.claimNodeId(id) ?? TreeNode.createNextNodeId();
     this.question = question;
     this.name = name;
     this.yesNode = yesNode;
@@ -35,29 +78,60 @@ export class TreeNode {
   }
 
   findNodeById(nodeId, visitedIds = new Set()) {
-    if (!nodeId || visitedIds.has(this.id)) {
+    const normalizedNodeId = TreeNode.normalizeNodeId(nodeId);
+    if (normalizedNodeId === null || visitedIds.has(this.id)) {
       return null;
     }
 
-    if (this.id === nodeId) {
+    if (this.id === normalizedNodeId) {
       return this;
     }
 
     visitedIds.add(this.id);
-    return this.yesNode?.findNodeById(nodeId, visitedIds) || this.noNode?.findNodeById(nodeId, visitedIds) || null;
+    return this.yesNode?.findNodeById(normalizedNodeId, visitedIds) || this.noNode?.findNodeById(normalizedNodeId, visitedIds) || null;
   }
 
   findParentOf(nodeId, visitedIds = new Set()) {
-    if (!nodeId || visitedIds.has(this.id)) {
+    const normalizedNodeId = TreeNode.normalizeNodeId(nodeId);
+    if (normalizedNodeId === null || visitedIds.has(this.id)) {
       return null;
     }
 
-    if (this.yesNode?.id === nodeId || this.noNode?.id === nodeId) {
+    if (this.yesNode?.id === normalizedNodeId || this.noNode?.id === normalizedNodeId) {
       return this;
     }
 
     visitedIds.add(this.id);
-    return this.yesNode?.findParentOf(nodeId, visitedIds) || this.noNode?.findParentOf(nodeId, visitedIds) || null;
+    return this.yesNode?.findParentOf(normalizedNodeId, visitedIds) || this.noNode?.findParentOf(normalizedNodeId, visitedIds) || null;
+  }
+
+  findPathToNode(nodeId, path = [], visitedIds = new Set()) {
+    const normalizedNodeId = TreeNode.normalizeNodeId(nodeId);
+    if (normalizedNodeId === null || visitedIds.has(this.id)) {
+      return null;
+    }
+
+    if (this.id === normalizedNodeId) {
+      return [...path];
+    }
+
+    visitedIds.add(this.id);
+
+    if (this.yesNode) {
+      const yesPath = this.yesNode.findPathToNode(normalizedNodeId, [...path, "yes"], visitedIds);
+      if (yesPath) {
+        return yesPath;
+      }
+    }
+
+    if (this.noNode) {
+      const noPath = this.noNode.findPathToNode(normalizedNodeId, [...path, "no"], visitedIds);
+      if (noPath) {
+        return noPath;
+      }
+    }
+
+    return null;
   }
 
   getNodeByPath(path) {
@@ -110,6 +184,15 @@ export class TreeNode {
     throw new Error("Cannot replace node: branch must be yes or no.");
   }
 
+  replaceNodeById(nodeId, nextNode) {
+    const path = this.findPathToNode(nodeId);
+    if (path === null) {
+      throw new Error(`Cannot replace node: target id not found: ${nodeId}`);
+    }
+
+    return this.replaceNodeByPath(path, nextNode);
+  }
+
   serializeGraph(visitedIds = new Set(), nodes = {}) {
     if (visitedIds.has(this.id)) {
       return { start: this.id, nodes };
@@ -145,37 +228,41 @@ export class TreeNode {
 
   static restoreGraph(payload) {
     const records = payload?.nodes;
-    const startId = payload?.start;
+    const startId = TreeNode.normalizeNodeId(payload?.start);
 
-    if (!records || typeof records !== "object" || !startId || !records[startId]) {
+    if (!records || typeof records !== "object" || startId === null || !records[String(startId)]) {
       throw new Error("Invalid tree payload.");
     }
 
     const restorationLog = {};
 
     function restoreNode(nodeId) {
-      if (!nodeId) {
+      const normalizedNodeId = TreeNode.normalizeNodeId(nodeId);
+      if (normalizedNodeId === null) {
         return null;
       }
 
-      if (restorationLog[nodeId]) {
-        return restorationLog[nodeId];
+      if (restorationLog[normalizedNodeId]) {
+        return restorationLog[normalizedNodeId];
       }
 
-      const record = records[nodeId];
+      const record = records[String(normalizedNodeId)];
       if (!record) {
-        throw new Error(`Missing node record for id: ${nodeId}`);
+        throw new Error(`Missing node record for id: ${normalizedNodeId}`);
       }
 
       const node = TreeNode.fromRecord(record);
-      restorationLog[nodeId] = node;
+      restorationLog[normalizedNodeId] = node;
       node.yesNode = restoreNode(record.yesNodeId);
       node.noNode = restoreNode(record.noNodeId);
       return node;
     }
 
+    const startNode = restoreNode(startId);
+    TreeNode.syncNextNodeId(startNode);
+
     return {
-      startNode: restoreNode(startId),
+      startNode,
       restorationLog,
     };
   }
@@ -185,15 +272,21 @@ export class TreeNode {
       return new TreeNode({ name: "cat" });
     }
 
+    const normalizedId = TreeNode.normalizeNodeId(legacyNode.id);
+
     if (legacyNode.type === "question") {
       return new TreeNode({
+        id: normalizedId,
         question: legacyNode.question || "",
         yesNode: TreeNode.fromLegacyNode(legacyNode.yes),
         noNode: TreeNode.fromLegacyNode(legacyNode.no),
       });
     }
 
-    return new TreeNode({ name: legacyNode.animal || legacyNode.name || "cat" });
+    return new TreeNode({
+      id: normalizedId,
+      name: legacyNode.animal || legacyNode.name || "cat",
+    });
   }
 
   static createDefault() {
@@ -210,6 +303,8 @@ export class TreeNode {
       return startNode;
     }
 
-    return TreeNode.fromLegacyNode(payload);
+    const restoredNode = TreeNode.fromLegacyNode(payload);
+    TreeNode.syncNextNodeId(restoredNode);
+    return restoredNode;
   }
 }

@@ -4,12 +4,37 @@ import { StateMachineNode } from "./state-machine-node.js";
 const DEFAULT_MACHINE_PUBLISH_AND_RECEIVE_TIMEOUT_MS = 5000;
 
 export class StateMachine {
-  constructor({ id, startNodeId, startNode, errorNodeId, errorNode, endNodeId, endNode, nodes = [], context = {}, eventBus = null } = {}) {
+  constructor(eventBus, definitionFactory) {
+    if (!eventBus) {
+      throw new Error("StateMachine requires an eventBus.");
+    }
+    if (typeof definitionFactory !== "function") {
+      throw new Error("StateMachine requires a definition factory function.");
+    }
+
+    const context = { eventBus };
+    const definition = definitionFactory(context);
+    if (!definition || typeof definition !== "object") {
+      throw new Error("StateMachine definition factory must return a definition object.");
+    }
+
+    const {
+      id,
+      startNodeId,
+      startNode,
+      errorNodeId,
+      errorNode,
+      endNodeId,
+      endNode,
+      nodes = [],
+    } = definition;
+
     this.id = id || "state-machine";
     this.startNodeId = startNode || startNodeId || null;
     this.errorNodeId = errorNode || errorNodeId || null;
     this.endNodeId = endNode || endNodeId || null;
-    this.context = context;
+    this.context = definition.context || context;
+    this.context.eventBus = eventBus;
     this.eventBus = eventBus;
     this.currentNodeId = null;
     this.isRunning = false;
@@ -26,11 +51,9 @@ export class StateMachine {
       this.nodes.set(node.id, node);
     }
 
-    if (this.eventBus) {
-      this.unsubscribeFromBus = this.eventBus.subscribe("all", this.subscriptionSourceId, (event) => {
-        this.handleEvent(event);
-      });
-    }
+    this.unsubscribeFromBus = this.eventBus.subscribe("all", this.subscriptionSourceId, (event) => {
+      this.handleEvent(event);
+    });
   }
 
   hasNode(nodeId) {
@@ -66,7 +89,7 @@ export class StateMachine {
   }
 
   waitForEventOnce(id, sourceId, timeoutMs) {
-    if (!this.eventBus || typeof this.eventBus.subscribeOne !== "function") {
+    if (typeof this.eventBus.subscribeOne !== "function") {
       throw new Error(`StateMachine "${this.id}" requires an event bus with subscribeOne().`);
     }
 
@@ -90,7 +113,7 @@ export class StateMachine {
   }
 
   waitForAnyEventOnce(ids, sourceId, timeoutMs) {
-    if (!this.eventBus || typeof this.eventBus.subscribeOne !== "function") {
+    if (typeof this.eventBus.subscribeOne !== "function") {
       throw new Error(`StateMachine "${this.id}" requires an event bus with subscribeOne().`);
     }
 
@@ -146,7 +169,7 @@ export class StateMachine {
     message = null,
     timeoutMs = DEFAULT_MACHINE_PUBLISH_AND_RECEIVE_TIMEOUT_MS,
   ) {
-    if (!this.eventBus || typeof this.eventBus.publishAndReceive !== "function") {
+    if (typeof this.eventBus.publishAndReceive !== "function") {
       throw new Error(`StateMachine "${this.id}" requires an event bus with publishAndReceive().`);
     }
 
@@ -160,10 +183,6 @@ export class StateMachine {
   }
 
   publishTransitionEvent(previousNodeId, currentNodeId) {
-    if (!this.eventBus) {
-      return;
-    }
-
     this.eventBus.publish(EventIds.stateMachineTransitioned, {
       machineId: this.id,
       previousNodeId,

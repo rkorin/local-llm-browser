@@ -1,90 +1,13 @@
 import { EventIds } from "./event-ids.js";
 import { StateMachine } from "./state-machine.js";
+import { getGameStateMachineDefinition } from "./state-machine-game.js";
 
-/**
- * Bootstrap state machine event/step map.
- *
- * Start node:
- * - `apply-static-resources`
- *
- * Error node:
- * - `provider-error`
- *
- * End node:
- * - `bootstrap-finished`
- *
- * Steps:
- * - `apply-static-resources`
- *   publishes: `app-resources-read-requested`
- *   waits: `app-static-resources-changed`
- *   stores: `machineContext.resources`
- *   next: `verify-provider`
- *
- * - `verify-provider`
- *   publishes: `provider-status-requested`
- *   waits: `provider-status-changed`
- *   stores: `machineContext.providerStatus`, `machineContext.providerStatusDetails`
- *   transitions:
- *   `not-selected` -> `error`
- *   `initializing` -> `wait-for-provider`
- *   `ready` -> `send-provider-healthcheck`
- *
- * - `wait-for-provider`
- *   publishes: nothing
- *   waits: local timer only (`providerRetryDelayMs`, default 5000 ms)
- *   next: `verify-provider`
- *
- * - `provider-error`
- *   publishes: nothing
- *   waits: nothing
- *   stores: `machineContext.machineResult = "error"`
- *   next: `end`
- *
- * - `send-provider-healthcheck`
- *   publishes: `llm-request-requested` with hello prompt
- *   waits: `llm-response-received` or `llm-request-failed`
- *   stores: `machineContext.providerHealthcheckEvent`
- *   transitions:
- *   success -> `wait-for-user-game-start`
- *   failure -> `error`
- *
- * - `wait-for-user-game-start`
- *   publishes: nothing
- *   waits: `ui-restart-requested`
- *   next: `launch-game-machine`
- *
- * - `launch-game-machine`
- *   publishes: nothing directly; nested game machine owns its own events
- *   waits: nested `gameStateMachine.run()` completion
- *   stores: `machineContext.lastGameResult`
- *   transitions: `won | lost | cancelled | invalid -> game-finished`
- *
- * - `game-finished`
- *   publishes: `game-finished` with the last game result
- *   waits: `ui-game-retry-requested` or `ui-game-close-requested`
- *   transitions:
- *   retry -> `launch-game-machine`
- *   close -> publishes `game-closed` and goes to `bootstrap-finished`
- *
- * - `bootstrap-finished`
- *   publishes: nothing
- *   waits: nothing
- *   next: terminal
- *
-
- */
 const DEFAULT_PROVIDER_RETRY_DELAY_MS = 5000;
 const APPLY_STATIC_RESOURCES_TIMEOUT_MS = 10000;
 const VERIFY_PROVIDER_STATUS_TIMEOUT_MS = 10000;
 const SEND_PROVIDER_HEALTHCHECK_TIMEOUT_MS = 60000;
 const WAIT_FOR_USER_GAME_START_TIMEOUT_MS = 0;
 const WAIT_FOR_GAME_FINISHED_ACTION_TIMEOUT_MS = 0;
-
-function requireFunction(context, key) {
-  if (typeof context[key] !== "function") {
-    throw new Error(`Bootstrap state machine requires context.${key}().`);
-  }
-}
 
 function requireObject(context, key) {
   if (!context[key]) {
@@ -98,11 +21,6 @@ function validateBootstrapContext(context) {
   }
 
   requireObject(context, "eventBus");
-  requireObject(context, "gameStateMachine");
-
-  if (typeof context.gameStateMachine.run !== "function") {
-    throw new Error("Bootstrap state machine requires context.gameStateMachine.run().");
-  }
 }
 
 function providerStatusOf(event) {
@@ -130,7 +48,6 @@ export function getCoreStateMachineDefinition(context) {
     errorNode: "provider-error",
     endNode: "bootstrap-finished",
     context,
-    eventBus: context.eventBus,
     nodes: [
       {
         id: "apply-static-resources",
@@ -224,14 +141,21 @@ export function getCoreStateMachineDefinition(context) {
       {
         id: "launch-game-machine",
         provider: async (machineContext) => {
-          const result = await machineContext.gameStateMachine.run();
+          const gameStateMachine = new StateMachine(
+            machineContext.eventBus,
+            (context) => {
+              context.resources = machineContext.resources;
+              return getGameStateMachineDefinition(context);
+            },
+          );
+          machineContext.gameStateMachine = gameStateMachine;
+          const result = await gameStateMachine.run();
           machineContext.lastGameResult = result.status;
           return result.status;
         },
         next: {
           won: "game-finished",
           lost: "game-finished",
-          cancelled: "game-finished",
           invalid: "game-finished",
           default: "game-finished",
         },
@@ -264,18 +188,6 @@ export function getCoreStateMachineDefinition(context) {
         provider: async () => "done",
         next: { done: null },
       },
-
     ],
   };
 }
-
-export function get_core_sm_definition(context) {
-  return getCoreStateMachineDefinition(context);
-}
-
-export function createBootstrapStateMachine(context) {
-  return new StateMachine(getCoreStateMachineDefinition(context));
-}
-
-
-

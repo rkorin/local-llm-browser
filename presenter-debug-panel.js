@@ -12,9 +12,14 @@ export class DebugPanelPresenter extends PresenterBase {
     this.debugPromptInputElement = this.findById("debug-prompt-input");
     this.debugResponseElement = this.findById("debug-response");
     this.rerunPromptButtonElement = this.findById("rerun-prompt-button");
+    this.initialize();
   }
 
   initialize() {
+    if (!this.beginInitialize()) {
+      return;
+    }
+
     this.listen(this.rerunPromptButtonElement, "click", () => {
       this.publish(EventIds.uiDebugRerunRequested, this.debugPromptInputElement.value);
     });

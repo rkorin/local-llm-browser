@@ -79,9 +79,14 @@ export class MainPresenter extends PresenterBase {
     this.resetTreeButtonElement = this.findById("reset-tree-button");
     this.resources = null;
     this.currentScreen = SCREEN_BASE;
+    this.initialize();
   }
 
   initialize() {
+    if (!this.beginInitialize()) {
+      return;
+    }
+
     this.listen(this.languageSelectElement, "change", () => {
       this.publish(EventIds.appResourcesReadRequested, this.languageSelectElement.value);
     });

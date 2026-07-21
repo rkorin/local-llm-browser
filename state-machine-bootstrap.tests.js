@@ -1,7 +1,7 @@
 import { EventIds } from "./event-ids.js";
 import { EventMessageBus } from "./event-message-bus.js";
-import * as StateMachineBootstrapModule from "./state-machine-bootstrap.js";
 import { StateMachine } from "./state-machine.js";
+import { getCoreStateMachineDefinition } from "./state-machine-bootstrap.js";
 import {
   assertArrayEqual,
   assertEqual,
@@ -31,19 +31,37 @@ function waitForEvent(eventBus, eventId, sourceId) {
 }
 
 function createBootstrapMachine(context) {
-  if (typeof StateMachineBootstrapModule.createBootstrapStateMachine === "function") {
-    return StateMachineBootstrapModule.createBootstrapStateMachine(context);
-  }
+  return new StateMachine(
+    context.eventBus,
+    (machineContext) => {
+      Object.assign(machineContext, context);
+      return getCoreStateMachineDefinition(machineContext);
+    },
+  );
+}
 
-  if (typeof StateMachineBootstrapModule.getCoreStateMachineDefinition === "function") {
-    return new StateMachine(StateMachineBootstrapModule.getCoreStateMachineDefinition(context));
-  }
-
-  if (typeof StateMachineBootstrapModule.get_core_sm_definition === "function") {
-    return new StateMachine(StateMachineBootstrapModule.get_core_sm_definition(context));
-  }
-
-  throw new Error("state-machine-bootstrap.js does not expose a supported bootstrap state machine factory.");
+function createStubGameDefinition(callLog, nextStatuses) {
+  return () => ({
+    id: "test-game-state-machine",
+    startNode: "run",
+    nodes: [
+      {
+        id: "run",
+        provider: async (machineContext) => {
+          const runIndex = Number(machineContext.gameRunCount || 0) + 1;
+          machineContext.gameRunCount = runIndex;
+          callLog.push(`game-state-machine-run${nextStatuses.length > 1 ? `:${runIndex}` : ""}`);
+          machineContext.machineResult = nextStatuses[Math.min(runIndex - 1, nextStatuses.length - 1)];
+          return machineContext.machineResult;
+        },
+        next: {
+          won: null,
+          lost: null,
+          invalid: null,
+        },
+      },
+    ],
+  });
 }
 
 function createBootstrapContext(overrides = {}) {
@@ -91,13 +109,7 @@ function createBootstrapContext(overrides = {}) {
     providerHealthcheckEvent: null,
     bootstrapProviderVerified: false,
     providerRetryDelayMs: 1,
-    gameStateMachine: {
-      async run() {
-        callLog.push("game-state-machine-run");
-        return { status: "won" };
-      },
-    },
-
+    buildGameStateMachineDefinition: createStubGameDefinition(callLog, ["won"]),
     ...overrides,
   };
 }
@@ -138,17 +150,16 @@ export function runBootstrapStateMachineTests() {
       assertEqual(result.status, "closed", "Bootstrap state machine should finish with the closed result when the user closes the finished session");
     }),
 
-
     runTest("state-machine-bootstrap-003 missing required context parts fail immediately", async () => {
       let actualMessage = "";
 
       try {
-        createBootstrapMachine({});
+        new StateMachine(null, (context) => getCoreStateMachineDefinition(context));
       } catch (error) {
         actualMessage = error instanceof Error ? error.message : String(error);
       }
 
-      assertEqual(actualMessage, "Bootstrap state machine requires context.eventBus.", "Bootstrap state machine should fail fast when required context parts are missing");
+      assertEqual(actualMessage, "StateMachine requires an eventBus.", "Bootstrap state machine should fail fast when eventBus is missing");
     }),
 
     runTest("state-machine-bootstrap-004 provider-not-selected goes to error without hello check or game launch", async () => {
@@ -240,6 +251,7 @@ export function runBootstrapStateMachineTests() {
         resolvedResources,
         attachDefaultHandlers: false,
         providerRetryDelayMs: 1,
+        buildGameStateMachineDefinition: createStubGameDefinition(callLog, ["won"]),
       });
       const machine = createBootstrapMachine(context);
       const waitForUserStartPromise = waitForTransition(eventBus, "wait-for-user-game-start");
@@ -270,7 +282,6 @@ export function runBootstrapStateMachineTests() {
     runTest("state-machine-bootstrap-006 game-finished retry launches a new nested game round", async () => {
       const callLog = [];
       const eventBus = new EventMessageBus();
-      let gameRuns = 0;
 
       eventBus.subscribe(EventIds.appResourcesReadRequested, "test:bootstrap:resources:6", () => {
         callLog.push("request-static-resources");
@@ -300,13 +311,7 @@ export function runBootstrapStateMachineTests() {
         callLog,
         eventBus,
         attachDefaultHandlers: false,
-        gameStateMachine: {
-          async run() {
-            gameRuns += 1;
-            callLog.push(`game-state-machine-run:${gameRuns}`);
-            return { status: gameRuns === 1 ? "lost" : "won" };
-          },
-        },
+        buildGameStateMachineDefinition: createStubGameDefinition(callLog, ["lost", "won"]),
       });
       const machine = createBootstrapMachine(context);
       const firstFinishedEventPromise = waitForEvent(eventBus, EventIds.gameFinished, "test:bootstrap:finished-event:6:first");
@@ -327,5 +332,3 @@ export function runBootstrapStateMachineTests() {
     }),
   ];
 }
-
-

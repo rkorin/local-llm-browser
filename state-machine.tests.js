@@ -15,33 +15,33 @@ function waitForMicrotask() {
 
 export function runStateMachineTests() {
   return [
-    // state-machine-001: runs nodes in order and returns final transition status
     runTest("state-machine-001 runs nodes in order and returns final transition status", async () => {
       const callLog = [];
-      const machine = new StateMachine({
+      const eventBus = new EventMessageBus();
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "state-machine-test",
         startNode: "start",
-        context: { callLog },
+        context: Object.assign(context, { callLog }),
         nodes: [
           {
             id: "start",
-            provider: async (context) => {
-              context.callLog.push("start");
+            provider: async (machineContext) => {
+              machineContext.callLog.push("start");
               return "next";
             },
             next: { next: "finish" },
           },
           {
             id: "finish",
-            provider: async (context) => {
-              context.callLog.push("finish");
-              context.machineResult = "completed";
+            provider: async (machineContext) => {
+              machineContext.callLog.push("finish");
+              machineContext.machineResult = "completed";
               return "completed";
             },
             next: { completed: null },
           },
         ],
-      });
+      }));
 
       const result = await machine.run();
 
@@ -49,15 +49,15 @@ export function runStateMachineTests() {
       assertEqual(machine.currentNodeId, "finish", "StateMachine should keep the last executed node id");
       assertEqual(result.status, "completed", "StateMachine should return machineResult as final status");
       assertEqual(result.context.lastTransitionKey, "completed", "StateMachine should expose the last transition key in context");
+      machine.dispose();
+      eventBus.dispose();
     }),
 
-    // state-machine-002: waitForEvent resolves when the matching bus event arrives
     runTest("state-machine-002 waitForEvent resolves when the matching bus event arrives", async () => {
       const eventBus = new EventMessageBus();
-      const machine = new StateMachine({
+      const machine = new StateMachine(eventBus, () => ({
         id: "wait-machine",
         startNode: "idle",
-        eventBus,
         nodes: [
           {
             id: "idle",
@@ -65,7 +65,7 @@ export function runStateMachineTests() {
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const waiter = machine.waitForEvent(EventIds.uiChoiceYes);
       eventBus.publish(EventIds.uiChoiceYes, { answer: true });
@@ -78,13 +78,11 @@ export function runStateMachineTests() {
       eventBus.dispose();
     }),
 
-    // state-machine-003: waitForAnyEvent resolves with the first matching event
     runTest("state-machine-003 waitForAnyEvent resolves with the first matching event", async () => {
       const eventBus = new EventMessageBus();
-      const machine = new StateMachine({
+      const machine = new StateMachine(eventBus, () => ({
         id: "wait-any-machine",
         startNode: "idle",
-        eventBus,
         nodes: [
           {
             id: "idle",
@@ -92,7 +90,7 @@ export function runStateMachineTests() {
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const waiter = machine.waitForAnyEvent([EventIds.uiChoiceYes, EventIds.uiChoiceNo]);
       eventBus.publish(EventIds.uiChoiceNo, { answer: false });
@@ -105,43 +103,44 @@ export function runStateMachineTests() {
       eventBus.dispose();
     }),
 
-    // state-machine-004: duplicate node ids are rejected early
     runTest("state-machine-004 duplicate node ids are rejected early", async () => {
       let actualMessage = "";
+      const eventBus = new EventMessageBus();
 
       try {
-        new StateMachine({
+        new StateMachine(eventBus, () => ({
           nodes: [
             { id: "same", provider: async () => "done", next: { done: null } },
             { id: "same", provider: async () => "done", next: { done: null } },
           ],
-        });
+        }));
       } catch (error) {
         actualMessage = error instanceof Error ? error.message : String(error);
       }
 
       assertEqual(actualMessage, "Duplicate state machine node id: same", "StateMachine should reject duplicate node ids with a clear error");
+      eventBus.dispose();
     }),
 
-    // state-machine-005: run returns current status when called while already running
     runTest("state-machine-005 run returns current status when called while already running", async () => {
-      const machine = new StateMachine({
+      const eventBus = new EventMessageBus();
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "reentry-machine",
         startNode: "wait",
-        context: {},
+        context,
         nodes: [
           {
             id: "wait",
-            provider: async (context) => {
-              context.machineResult = "running-node";
+            provider: async (machineContext) => {
+              machineContext.machineResult = "running-node";
               await waitForMicrotask();
-              context.machineResult = "done";
+              machineContext.machineResult = "done";
               return "done";
             },
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const firstRunPromise = machine.run();
       const secondRunResult = await machine.run();
@@ -149,9 +148,10 @@ export function runStateMachineTests() {
 
       assertEqual(secondRunResult.status, "running-node", "StateMachine should expose the current running status on reentry");
       assertEqual(finalResult.status, "done", "StateMachine should still finish the original run normally");
+      machine.dispose();
+      eventBus.dispose();
     }),
 
-    // state-machine-006: entering a node publishes a state-machine transition event
     runTest("state-machine-006 entering a node publishes a state-machine transition event", async () => {
       const eventBus = new EventMessageBus();
       const transitions = [];
@@ -159,11 +159,10 @@ export function runStateMachineTests() {
         transitions.push(event.message);
       });
 
-      const machine = new StateMachine({
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "bootstrap-state-machine",
         startNode: "apply-static-resources",
-        eventBus,
-        context: {},
+        context,
         nodes: [
           {
             id: "apply-static-resources",
@@ -176,7 +175,7 @@ export function runStateMachineTests() {
             next: { done: null },
           },
         ],
-      });
+      }));
 
       await machine.run();
 
@@ -190,122 +189,126 @@ export function runStateMachineTests() {
       eventBus.dispose();
     }),
 
-    // state-machine-007: returning an existing node id works without an explicit next mapping
     runTest("state-machine-007 returning an existing node id works without an explicit next mapping", async () => {
       const callLog = [];
-      const machine = new StateMachine({
+      const eventBus = new EventMessageBus();
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "implicit-transition-machine",
         startNode: "start",
-        context: { callLog },
+        context: Object.assign(context, { callLog }),
         nodes: [
           {
             id: "start",
-            provider: async (context) => {
-              context.callLog.push("start");
+            provider: async (machineContext) => {
+              machineContext.callLog.push("start");
               return "finish";
             },
           },
           {
             id: "finish",
-            provider: async (context) => {
-              context.callLog.push("finish");
-              context.machineResult = "done";
+            provider: async (machineContext) => {
+              machineContext.callLog.push("finish");
+              machineContext.machineResult = "done";
               return "done";
             },
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const result = await machine.run();
 
       assertArrayEqual(callLog, ["start", "finish"], "StateMachine should allow direct node-id transitions without redundant next mappings");
       assertEqual(result.status, "done", "StateMachine should still finish normally after an implicit node-id transition");
+      machine.dispose();
+      eventBus.dispose();
     }),
 
-    // state-machine-008: missing default falls back to the unified error node automatically
     runTest("state-machine-008 missing default falls back to the unified error node automatically", async () => {
       const callLog = [];
-      const machine = new StateMachine({
+      const eventBus = new EventMessageBus();
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "implicit-error-fallback-machine",
         startNode: "start",
         errorNode: "fail",
-        context: { callLog },
+        context: Object.assign(context, { callLog }),
         nodes: [
           {
             id: "start",
-            provider: async (context) => {
-              context.callLog.push("start");
+            provider: async (machineContext) => {
+              machineContext.callLog.push("start");
               return "unexpected-transition";
             },
           },
           {
             id: "fail",
-            provider: async (context) => {
-              context.callLog.push("fail");
-              context.machineResult = "error";
+            provider: async (machineContext) => {
+              machineContext.callLog.push("fail");
+              machineContext.machineResult = "error";
               return "done";
             },
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const result = await machine.run();
 
       assertArrayEqual(callLog, ["start", "fail"], "StateMachine should route unknown transitions to the shared error node when default is missing");
       assertEqual(result.status, "error", "StateMachine should preserve the shared error result after default fallback");
+      machine.dispose();
+      eventBus.dispose();
     }),
 
-    // state-machine-009: returning error goes to the unified error node automatically
     runTest("state-machine-009 returning error goes to the unified error node automatically", async () => {
       const callLog = [];
-      const machine = new StateMachine({
+      const eventBus = new EventMessageBus();
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "error-node-machine",
         startNode: "start",
         errorNode: "fail",
-        context: { callLog },
+        context: Object.assign(context, { callLog }),
         nodes: [
           {
             id: "start",
-            provider: async (context) => {
-              context.callLog.push("start");
+            provider: async (machineContext) => {
+              machineContext.callLog.push("start");
               return "error";
             },
           },
           {
             id: "fail",
-            provider: async (context) => {
-              context.callLog.push("fail");
-              context.machineResult = "error";
+            provider: async (machineContext) => {
+              machineContext.callLog.push("fail");
+              machineContext.machineResult = "error";
               return "done";
             },
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const result = await machine.run();
 
       assertArrayEqual(callLog, ["start", "fail"], "StateMachine should route error to the shared error node automatically");
       assertEqual(result.status, "error", "StateMachine should preserve the unified error result");
+      machine.dispose();
+      eventBus.dispose();
     }),
 
-    // state-machine-010: publishAndReceive timeout from a node provider goes to the unified error node automatically
     runTest("state-machine-010 publishAndReceive timeout from a node provider goes to the unified error node automatically", async () => {
       const callLog = [];
       const eventBus = new EventMessageBus({ oneTimeSweepIntervalMs: 5 });
-      const machine = new StateMachine({
+      const machine = new StateMachine(eventBus, (context) => ({
         id: "timeout-error-machine",
         startNode: "start",
         errorNode: "fail",
-        eventBus,
-        context: { callLog },
+        context: Object.assign(context, { callLog }),
         nodes: [
           {
             id: "start",
-            provider: async (context, currentMachine) => {
-              context.callLog.push("start");
+            provider: async (machineContext, currentMachine) => {
+              machineContext.callLog.push("start");
               await currentMachine.publishAndReceive(
                 EventIds.providerStatusRequested,
                 EventIds.providerStatusChanged,
@@ -313,22 +316,22 @@ export function runStateMachineTests() {
                 null,
                 0,
               );
-              context.callLog.push("after-timeout");
+              machineContext.callLog.push("after-timeout");
               return "done";
             },
             next: { done: null },
           },
           {
             id: "fail",
-            provider: async (context) => {
-              context.callLog.push("fail");
-              context.machineResult = "error";
+            provider: async (machineContext) => {
+              machineContext.callLog.push("fail");
+              machineContext.machineResult = "error";
               return "done";
             },
             next: { done: null },
           },
         ],
-      });
+      }));
 
       const result = await machine.run();
 

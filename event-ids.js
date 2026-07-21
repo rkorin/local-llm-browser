@@ -12,9 +12,11 @@ export const EventIds = {
   treeRootReadRequested: "tree-root-read-requested",
   treeRootSaveRequested: "tree-root-save-requested",
   treeRootResetRequested: "tree-root-reset-requested",
+  treeNodeReplaceRequested: "tree-node-replace-requested",
 
   // Tree updates.
   treeRootLoaded: "tree-root-loaded",
+  treeNodeReplaced: "tree-node-replaced",
 
   /* llm providers */
   // Provider commands.
@@ -40,6 +42,11 @@ export const EventIds = {
   debugContextChanged: "debug-context-changed",
   gameFinished: "game-finished",
   gameClosed: "game-closed",
+  gameRoundStarted: "game-round-started",
+  gameChatCleared: "game-chat-cleared",
+  gameChatMessageAdded: "game-chat-message-added",
+  gameQuestionAsked: "game-question-asked",
+  gameInteractionStateChanged: "game-interaction-state-changed",
 
   // State machine lifecycle updates.
   stateMachineTransitioned: "state-machine-transitioned",
@@ -58,7 +65,4 @@ export const EventIds = {
 
   // Debug UI commands.
   uiDebugRerunRequested: "ui-debug-rerun-requested",
-
-  // Game flow control.
-  gameCancel: "game-cancel",
 };

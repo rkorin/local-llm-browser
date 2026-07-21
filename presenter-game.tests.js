@@ -54,10 +54,13 @@ const ENGLISH_RESOURCES = {
     animalInputPlaceholder: "Type the animal name in English",
   },
   game: {
+    messages: {
+      roundStarted: "Let us play. Think of an animal and I will try to guess it.",
+      lostAskAnimal: "I did not guess it. Which animal did you choose?",
+    },
     finished: {
       won: "You won.",
       lost: "You lost.",
-      cancelled: "Game cancelled.",
       invalid: "Game finished with an invalid state.",
       closed: "The game session is closed. Press F5 to start again.",
     },
@@ -68,7 +71,6 @@ export function runGamePresenterTests() {
   return [
     runTest("presenter-game-001 resource event updates game labels", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
 
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
@@ -83,40 +85,86 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-002 game context renders choice mode and chat log", async () => {
+    runTest("presenter-game-002 game state machine start step clears chat and appends exactly one intro message", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+      fixture.eventBus.publish(EventIds.gameChatMessageAdded, { role: "user", message: "stale" });
 
-      fixture.eventBus.publish(EventIds.gameContextChanged, {
-        visible: true,
-        mode: "choice",
-        chat: [
-          { role: "game", message: "Is it a cat?" },
-          { role: "user", message: "Yes" },
-        ],
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: null,
+        currentNodeId: "step-1-start-round",
       });
 
-      assertEqual(fixture.root.classList.contains("hidden"), false, "GamePresenter should show the game root when game context is visible");
-      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), false, "GamePresenter should show choice row in choice mode");
-      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should hide input row in choice mode");
-      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide restart row during active gameplay");
-      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should render every chat item as a bubble");
-      assertEqual(fixture.root.querySelector("#chat-log").children[0].textContent, "Is it a cat?", "GamePresenter should render the first chat bubble text");
-      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "Yes", "GamePresenter should render the second chat bubble text");
+      assertEqual(fixture.root.classList.contains("hidden"), false, "GamePresenter should show the game root on the start-round step");
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 1, "GamePresenter should clear the chat before appending the single intro message");
+      assertEqual(fixture.root.querySelector("#chat-log").children[0].textContent, "Let us play. Think of an animal and I will try to guess it.", "GamePresenter should append the localized intro message on the start-round step");
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should keep yes/no actions hidden on the intro screen");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should keep input hidden on the intro screen");
 
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-003 game context renders input mode and clears input field", async () => {
+    runTest("presenter-game-003 one question event appends one bubble and shows yes/no controls", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: null,
+        currentNodeId: "step-1-start-round",
+      });
+      const firstBubble = fixture.root.querySelector("#chat-log").children[0];
+
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
+        role: "game",
+        text: "Is it cat?",
+      });
+
+      assertEqual(fixture.root.classList.contains("hidden"), false, "GamePresenter should keep the game root visible after a question event");
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append one new chat bubble for the question event");
+      assertEqual(fixture.root.querySelector("#chat-log").children[0], firstBubble, "GamePresenter should keep the existing intro bubble when appending the question bubble");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "Is it cat?", "GamePresenter should append the question text from the domain event");
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), false, "GamePresenter should show yes/no controls for a question event");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-004 step 7 appends lost messages and shows input", async () => {
+      const fixture = createGamePresenterFixture();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: null,
+        currentNodeId: "step-1-start-round",
+      });
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
+        role: "game",
+        text: "Is it cat?",
+      });
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 4, "GamePresenter should append two new bubbles when step 7 starts");
+      assertEqual(fixture.root.querySelector("#chat-log").children[2].textContent, "You lost.", "GamePresenter should report that the round was lost at step 7");
+      assertEqual(fixture.root.querySelector("#chat-log").children[3].textContent, "I did not guess it. Which animal did you choose?", "GamePresenter should ask the user for the animal name at step 7");
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide yes/no controls at step 7");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should show the input row at step 7");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-005 interaction-state event switches to input mode and clears input field", async () => {
+      const fixture = createGamePresenterFixture();
       fixture.root.querySelector("#animal-input").value = "old value";
 
-      fixture.eventBus.publish(EventIds.gameContextChanged, {
-        visible: true,
-        mode: "input",
-        chat: [],
-      });
+      fixture.eventBus.publish(EventIds.gameInteractionStateChanged, { mode: "input" });
 
       assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice row in input mode");
       assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should show input row in input mode");
@@ -126,9 +174,8 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-004 game-finished shows result screen with retry and close actions", async () => {
+    runTest("presenter-game-006 game-finished shows result screen with retry and close actions", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
       fixture.eventBus.publish(EventIds.gameFinished, {
@@ -142,9 +189,8 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-005 game-closed shows static closed message and hides actions", async () => {
+    runTest("presenter-game-007 game-closed shows static closed message and hides actions", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
       fixture.eventBus.publish(EventIds.gameClosed, {
@@ -158,9 +204,8 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-006 clicks publish game UI events through the event bus", async () => {
+    runTest("presenter-game-008 clicks publish game UI events through the event bus", async () => {
       const fixture = createGamePresenterFixture();
-      fixture.presenter.initialize();
       const published = [];
       fixture.eventBus.subscribe("all", "test:game-panel:published", (event) => {
         published.push(event);

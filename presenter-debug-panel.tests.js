@@ -1,4 +1,4 @@
-﻿import { EventIds } from "./event-ids.js";
+import { EventIds } from "./event-ids.js";
 import { EventMessageBus } from "./event-message-bus.js";
 import { DebugPanelPresenter } from "./presenter-debug-panel.js";
 import {
@@ -48,10 +48,8 @@ const ENGLISH_RESOURCES = {
 
 export function runDebugPanelPresenterTests() {
   return [
-    // presenter-debug-001: resource event updates debug labels
     runTest("presenter-debug-001 resource event updates debug labels", async () => {
       const fixture = createDebugPresenterFixture();
-      fixture.presenter.initialize();
 
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
@@ -64,10 +62,8 @@ export function runDebugPanelPresenterTests() {
       fixture.cleanup();
     }),
 
-    // presenter-debug-002: debug context renders panel visibility and content
     runTest("presenter-debug-002 debug context renders panel visibility and content", async () => {
       const fixture = createDebugPresenterFixture();
-      fixture.presenter.initialize();
 
       fixture.eventBus.publish(EventIds.debugContextChanged, {
         visible: true,
@@ -84,10 +80,8 @@ export function runDebugPanelPresenterTests() {
       fixture.cleanup();
     }),
 
-    // presenter-debug-003: debug rerun interactions publish bus events
     runTest("presenter-debug-003 debug rerun interactions publish bus events", async () => {
       const fixture = createDebugPresenterFixture();
-      fixture.presenter.initialize();
       const published = [];
       fixture.eventBus.subscribe("all", "test:debug-panel:published", (event) => {
         published.push(event);
