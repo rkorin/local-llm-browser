@@ -3,6 +3,18 @@ import { StateMachineNode } from "./state-machine-node.js";
 
 const DEFAULT_MACHINE_PUBLISH_AND_RECEIVE_TIMEOUT_MS = 5000;
 
+/**
+ * Executes a state-machine definition without any permanent event-bus subscription.
+ *
+ * Accepts / subscribes to:
+ * - only response or user-intent events explicitly awaited by the current node through
+ *   `waitForEventOnce()`, `waitForAnyEventOnce()`, or `publishAndReceive()`.
+ *
+ * Emits / publishes:
+ * - `state-machine-transitioned` whenever execution enters a node;
+ * - request events explicitly published by the current node through `publishAndReceive()`.
+ */
+
 export class StateMachine {
   constructor(eventBus, definitionFactory) {
     if (!eventBus) {
@@ -39,9 +51,6 @@ export class StateMachine {
     this.currentNodeId = null;
     this.isRunning = false;
     this.nodes = new Map();
-    this.eventWaiters = new Map();
-    this.unsubscribeFromBus = null;
-    this.subscriptionSourceId = `StateMachine:${this.id}:all`;
 
     for (const config of nodes) {
       const node = config instanceof StateMachineNode ? config : new StateMachineNode(config);
@@ -50,10 +59,6 @@ export class StateMachine {
       }
       this.nodes.set(node.id, node);
     }
-
-    this.unsubscribeFromBus = this.eventBus.subscribe("all", this.subscriptionSourceId, (event) => {
-      this.handleEvent(event);
-    });
   }
 
   hasNode(nodeId) {
@@ -66,26 +71,6 @@ export class StateMachine {
       throw new Error(`Unknown state machine node: ${nodeId}`);
     }
     return node;
-  }
-
-  handleEvent(event) {
-    const waiters = this.eventWaiters.get(event.id);
-    if (!waiters || waiters.length === 0) {
-      return;
-    }
-
-    this.eventWaiters.delete(event.id);
-    for (const resolve of waiters) {
-      resolve(event);
-    }
-  }
-
-  waitForEvent(id) {
-    return new Promise((resolve) => {
-      const waiters = this.eventWaiters.get(id) || [];
-      waiters.push(resolve);
-      this.eventWaiters.set(id, waiters);
-    });
   }
 
   waitForEventOnce(id, sourceId, timeoutMs) {
@@ -106,10 +91,6 @@ export class StateMachine {
         },
       );
     });
-  }
-
-  waitForAnyEvent(ids) {
-    return Promise.race(ids.map((id) => this.waitForEvent(id)));
   }
 
   waitForAnyEventOnce(ids, sourceId, timeoutMs) {
@@ -230,8 +211,5 @@ export class StateMachine {
 
   dispose() {
     this.stop();
-    this.eventWaiters.clear();
-    this.unsubscribeFromBus?.();
-    this.unsubscribeFromBus = null;
   }
 }

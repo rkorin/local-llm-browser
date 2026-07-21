@@ -1,6 +1,7 @@
 import { EventIds } from "./event-ids.js";
 import { PresenterBase } from "./presenter-base.js";
 
+export const GAME_PRESENTER_ROOT_ID = "game-panel";
 const GAME_MACHINE_ID = "game-state-machine";
 const STEP_START_ROUND = "step-1-start-round";
 const STEP_REQUEST_USER_ANIMAL = "step-7-request-user-animal";

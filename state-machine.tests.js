@@ -53,10 +53,10 @@ export function runStateMachineTests() {
       eventBus.dispose();
     }),
 
-    runTest("state-machine-002 waitForEvent resolves when the matching bus event arrives", async () => {
+    runTest("state-machine-002 constructor does not create a permanent event-bus subscription", async () => {
       const eventBus = new EventMessageBus();
       const machine = new StateMachine(eventBus, () => ({
-        id: "wait-machine",
+        id: "no-permanent-subscription-machine",
         startNode: "idle",
         nodes: [
           {
@@ -67,42 +67,12 @@ export function runStateMachineTests() {
         ],
       }));
 
-      const waiter = machine.waitForEvent(EventIds.uiChoiceYes);
-      eventBus.publish(EventIds.uiChoiceYes, { answer: true });
-      const event = await waiter;
-
-      assertEqual(event.id, EventIds.uiChoiceYes, "waitForEvent should resolve with the published event id");
-      assertEqual(event.message.answer, true, "waitForEvent should resolve with the published payload");
+      assertEqual(eventBus.subscribersByEventId.has("all"), false, "StateMachine should not subscribe permanently to all events");
+      assertEqual(eventBus.subscribersByEventId.size, 0, "StateMachine construction should not add any event-bus subscriptions");
 
       machine.dispose();
       eventBus.dispose();
     }),
-
-    runTest("state-machine-003 waitForAnyEvent resolves with the first matching event", async () => {
-      const eventBus = new EventMessageBus();
-      const machine = new StateMachine(eventBus, () => ({
-        id: "wait-any-machine",
-        startNode: "idle",
-        nodes: [
-          {
-            id: "idle",
-            provider: async () => "done",
-            next: { done: null },
-          },
-        ],
-      }));
-
-      const waiter = machine.waitForAnyEvent([EventIds.uiChoiceYes, EventIds.uiChoiceNo]);
-      eventBus.publish(EventIds.uiChoiceNo, { answer: false });
-      const event = await waiter;
-
-      assertEqual(event.id, EventIds.uiChoiceNo, "waitForAnyEvent should resolve with the first matching event");
-      assertEqual(event.message.answer, false, "waitForAnyEvent should preserve the winning event payload");
-
-      machine.dispose();
-      eventBus.dispose();
-    }),
-
     runTest("state-machine-004 duplicate node ids are rejected early", async () => {
       let actualMessage = "";
       const eventBus = new EventMessageBus();
@@ -314,7 +284,7 @@ export function runStateMachineTests() {
                 EventIds.providerStatusChanged,
                 "test:timeout-error-machine",
                 null,
-                0,
+                1,
               );
               machineContext.callLog.push("after-timeout");
               return "done";

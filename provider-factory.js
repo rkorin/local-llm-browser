@@ -6,12 +6,8 @@ import { EventIds } from "./event-ids.js";
 const MODEL_ID = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
 const MODEL_URL = "https://huggingface.co/mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC";
 const MODEL_LIB_URL = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_84/base/Llama-3.2-3B-Instruct-q4f16_1_cs1k-webgpu.wasm";
-const PROVIDER_TYPE_ALIASES = {
-  local: "local",
-  echo: "echo",
-  openai: "openai",
-  openia: "openai",
-};
+export const DEFAULT_PROVIDER_TYPE = "local";
+const SUPPORTED_PROVIDER_TYPES = new Set(["local", "echo", "openai"]);
 
 /**
  * Keeps the latest provider config from independent bus events, manages
@@ -98,7 +94,7 @@ export class ProviderFactory {
 
   normalizeProviderType(providerType) {
     const normalized = String(providerType ?? "").trim().toLowerCase();
-    return PROVIDER_TYPE_ALIASES[normalized] || null;
+    return SUPPORTED_PROVIDER_TYPES.has(normalized) ? normalized : null;
   }
 
   resolveProviderType(providerType) {

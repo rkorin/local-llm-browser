@@ -5,6 +5,19 @@ const KNOWN_EVENT_IDS = new Set(Object.values(EventIds));
 const DEFAULT_ONE_TIME_SWEEP_INTERVAL_MS = 5000;
 const DEFAULT_PUBLISH_AND_RECEIVE_TIMEOUT_MS = 5000;
 
+/**
+ * Central application event dispatcher and runtime-wide ID allocator.
+ *
+ * Accepts / subscribes to:
+ * - no events itself; it stores subscriptions registered by other runtime objects.
+ *
+ * Emits / publishes:
+ * - every event declared in `EventIds`, dispatching it to matching subscribers.
+ *
+ * Runtime service:
+ * - `GetNextId()` returns the next ID from this bus instance's monotonic counter.
+ */
+
 export class EventMessageBusTimeoutError extends Error {
   constructor(eventId, sourceId) {
     super(`EventMessageBus.subscribeOne timed out for event "${eventId}" and source "${sourceId}".`);
@@ -18,6 +31,7 @@ export class EventMessageBus {
   constructor({ oneTimeSweepIntervalMs = DEFAULT_ONE_TIME_SWEEP_INTERVAL_MS } = {}) {
     this.subscribersByEventId = new Map();
     this.subscribersByEventIdOne = new Map();
+    this.nextId = 1;
     this.oneTimeSweepIntervalMs = this.normalizeTimeout(
       oneTimeSweepIntervalMs,
       "EventMessageBus requires a non-negative one-time sweep interval.",
@@ -25,6 +39,12 @@ export class EventMessageBus {
     this.oneTimeSweepTimerId = setInterval(() => {
       this.removeExpiredOneTimeSubscribers();
     }, this.oneTimeSweepIntervalMs);
+  }
+
+  GetNextId() {
+    const nextId = this.nextId;
+    this.nextId += 1;
+    return nextId;
   }
 
   subscribe(eventId, sourceId, handler) {

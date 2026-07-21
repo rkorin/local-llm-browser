@@ -364,16 +364,17 @@ It should support:
 - running from a start node;
 - moving between nodes through explicit transition keys;
 - publishing transition events to the event bus;
-- waiting for external events from the bus;
-- possibly providing a generic LLM request helper built on top of the event bus;
+- waiting for external events through one-time event-bus subscriptions owned by the current operation;
+- publishing a request and awaiting its one-time response through the event bus;
 - exposing enough runtime state that external tools can inspect or control it.
 
-The original intent explicitly expects functionality like:
+The base machine provides only temporary waiting APIs:
 
-- `waitForEvent("some-event-id")`
-- `waitForAnyEvent([...])`
-- a generic `fetchLlm` or `requestLlm` helper owned by the base class rather than duplicated across business flows.
+- `waitForEventOnce("some-event-id", sourceId, timeoutMs)`;
+- `waitForAnyEventOnce([...], sourceId, timeoutMs)`;
+- `publishAndReceive(...)` for request-response operations.
 
+A state machine must not create a permanent `"all"` subscription merely to support its steps.
 Architectural rule:
 
 - the base machine should know about orchestration mechanics;
@@ -386,7 +387,7 @@ The core machine is the application-level orchestrator.
 It should:
 
 - publish transition events automatically;
-- subscribe to the event bus as needed for control;
+- create one-time event-bus waits only when the current orchestration step needs them;
 - stay ignorant of UI implementation details;
 - stay ignorant of provider implementation details;
 - stay ignorant of resource-loading internals except through generic readiness events.

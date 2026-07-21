@@ -164,5 +164,13 @@ export function runEventMessageBusTests() {
       assertEqual(event.message.error, "boom", "publishAndReceive should preserve the payload of the winning response event.");
       bus.dispose();
     }),
+    runTest("event-message-bus-016 GetNextId is monotonic for the full bus lifetime", () => {
+      const bus = new EventMessageBus();
+
+      assertEqual(bus.GetNextId(), 1, "The first runtime id should be 1");
+      assertEqual(bus.GetNextId(), 2, "Runtime ids should increase monotonically");
+      bus.dispose();
+      assertEqual(bus.GetNextId(), 3, "Disposing subscriptions should not reset the runtime id counter");
+    }),
   ];
 }

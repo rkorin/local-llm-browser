@@ -41,6 +41,7 @@ function createBootstrapMachine(context) {
 }
 
 function createStubGameDefinition(callLog, nextStatuses) {
+  let gameRunCount = 0;
   return () => ({
     id: "test-game-state-machine",
     startNode: "run",
@@ -48,8 +49,9 @@ function createStubGameDefinition(callLog, nextStatuses) {
       {
         id: "run",
         provider: async (machineContext) => {
-          const runIndex = Number(machineContext.gameRunCount || 0) + 1;
-          machineContext.gameRunCount = runIndex;
+          gameRunCount += 1;
+          const runIndex = gameRunCount;
+          machineContext.gameRunCount = gameRunCount;
           callLog.push(`game-state-machine-run${nextStatuses.length > 1 ? `:${runIndex}` : ""}`);
           machineContext.machineResult = nextStatuses[Math.min(runIndex - 1, nextStatuses.length - 1)];
           return machineContext.machineResult;
@@ -143,10 +145,10 @@ export function runBootstrapStateMachineTests() {
       );
       assertEqual(gameFinishedEvent.message.result, "won", "Bootstrap state machine should publish game-finished with the nested game result.");
       assertEqual(gameClosedEvent.message.result, "won", "Bootstrap state machine should publish game-closed with the same final result when the user closes the session.");
-      assertEqual(context.resources.prompts.healthcheck, "hello", "Bootstrap state machine should store resolved resources in local context");
-      assertEqual(context.providerStatus, "ready", "Bootstrap state machine should keep the latest provider status in local state");
-      assertEqual(context.bootstrapProviderVerified, true, "Bootstrap state machine should mark provider verification after hello succeeded");
-      assertEqual(context.lastGameResult, "won", "Bootstrap state machine should remember the nested game result");
+      assertEqual(result.context.resources.prompts.healthcheck, "hello", "Bootstrap state machine should store resolved resources in local context");
+      assertEqual(result.context.providerStatus, "ready", "Bootstrap state machine should keep the latest provider status in local state");
+      assertEqual(result.context.bootstrapProviderVerified, true, "Bootstrap state machine should mark provider verification after hello succeeded");
+      assertEqual(result.context.lastGameResult, "won", "Bootstrap state machine should remember the nested game result");
       assertEqual(result.status, "closed", "Bootstrap state machine should finish with the closed result when the user closes the finished session");
     }),
 
@@ -275,7 +277,7 @@ export function runBootstrapStateMachineTests() {
         ],
         "Bootstrap state machine should sleep and then re-check provider status before continuing",
       );
-      assertEqual(context.providerStatus, "ready", "Bootstrap state machine should update provider status after the re-check returns ready");
+      assertEqual(result.context.providerStatus, "ready", "Bootstrap state machine should update provider status after the re-check returns ready");
       assertEqual(result.status, "closed", "Bootstrap state machine should continue after the provider becomes ready and then allow final close");
     }),
 
@@ -315,12 +317,13 @@ export function runBootstrapStateMachineTests() {
       });
       const machine = createBootstrapMachine(context);
       const firstFinishedEventPromise = waitForEvent(eventBus, EventIds.gameFinished, "test:bootstrap:finished-event:6:first");
-      const secondFinishedEventPromise = waitForEvent(eventBus, EventIds.gameFinished, "test:bootstrap:finished-event:6:second");
+
       const resultPromise = machine.run();
 
       await waitForTransition(eventBus, "wait-for-user-game-start");
       eventBus.publish(EventIds.uiRestartRequested, null);
       const firstFinishedEvent = await firstFinishedEventPromise;
+      const secondFinishedEventPromise = waitForEvent(eventBus, EventIds.gameFinished, "test:bootstrap:finished-event:6:second");
       eventBus.publish(EventIds.uiGameRetryRequested, null);
       const secondFinishedEvent = await secondFinishedEventPromise;
       eventBus.publish(EventIds.uiGameCloseRequested, null);

@@ -2,6 +2,22 @@ import { EventIds } from "./event-ids.js";
 import { StateMachine } from "./state-machine.js";
 import { getGameStateMachineDefinition } from "./state-machine-game.js";
 
+/**
+ * Bootstrap state-machine event contract.
+ *
+ * Accepts / subscribes to:
+ * - app-static-resources-changed after requesting localized resources;
+ * - provider-status-changed while waiting for provider readiness;
+ * - llm-response-received and llm-request-failed for the provider health check;
+ * - ui-restart-requested before the first game;
+ * - ui-game-retry-requested and ui-game-close-requested after a finished game.
+ *
+ * Emits / publishes:
+ * - app-resources-read-requested to load localized resources;
+ * - provider-status-requested to inspect provider readiness;
+ * - llm-request-requested to run the provider health check;
+ * - game-finished and game-closed for the final game lifecycle.
+ */
 const DEFAULT_PROVIDER_RETRY_DELAY_MS = 5000;
 const APPLY_STATIC_RESOURCES_TIMEOUT_MS = 10000;
 const VERIFY_PROVIDER_STATUS_TIMEOUT_MS = 10000;
@@ -141,17 +157,23 @@ export function getCoreStateMachineDefinition(context) {
       {
         id: "launch-game-machine",
         provider: async (machineContext) => {
+          const buildGameStateMachineDefinition = machineContext.buildGameStateMachineDefinition
+            || getGameStateMachineDefinition;
           const gameStateMachine = new StateMachine(
             machineContext.eventBus,
             (context) => {
               context.resources = machineContext.resources;
-              return getGameStateMachineDefinition(context);
+              return buildGameStateMachineDefinition(context);
             },
           );
           machineContext.gameStateMachine = gameStateMachine;
-          const result = await gameStateMachine.run();
-          machineContext.lastGameResult = result.status;
-          return result.status;
+          try {
+            const result = await gameStateMachine.run();
+            machineContext.lastGameResult = result.status;
+            return result.status;
+          } finally {
+            gameStateMachine.dispose();
+          }
         },
         next: {
           won: "game-finished",

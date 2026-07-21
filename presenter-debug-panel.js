@@ -1,6 +1,8 @@
 import { EventIds } from "./event-ids.js";
 import { PresenterBase } from "./presenter-base.js";
 
+export const DEBUG_PANEL_PRESENTER_ROOT_ID = "debug-panel";
+
 export class DebugPanelPresenter extends PresenterBase {
   constructor(config = {}) {
     super(config);

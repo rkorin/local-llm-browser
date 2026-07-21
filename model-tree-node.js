@@ -13,45 +13,28 @@ function normalizeNodeId(value) {
   return null;
 }
 
+/**
+ * Runtime tree node whose identity belongs to the shared event bus.
+ *
+ * Accepts / subscribes to:
+ * - no events.
+ *
+ * Emits / publishes:
+ * - no events.
+ *
+ * Uses `eventBus.GetNextId()` to obtain a fresh runtime-only node ID.
+ */
 export class TreeNode {
-  static nextNodeId = 1;
-
-  static claimNodeId(value) {
-    const normalizedId = normalizeNodeId(value);
-    if (normalizedId === null) {
-      return null;
-    }
-
-    TreeNode.nextNodeId = Math.max(TreeNode.nextNodeId, normalizedId + 1);
-    return normalizedId;
-  }
-
-  static createNextNodeId() {
-    const nextId = TreeNode.nextNodeId;
-    TreeNode.nextNodeId += 1;
-    return nextId;
-  }
-
-  static syncNextNodeId(rootNode) {
-    let maxNodeId = 0;
-
-    rootNode?.traverseDepthFirst((node) => {
-      const normalizedId = normalizeNodeId(node?.id);
-      if (normalizedId !== null) {
-        maxNodeId = Math.max(maxNodeId, normalizedId);
-      }
-    });
-
-    TreeNode.nextNodeId = Math.max(TreeNode.nextNodeId, maxNodeId + 1);
-    return TreeNode.nextNodeId;
-  }
-
   static normalizeNodeId(value) {
     return normalizeNodeId(value);
   }
 
-  constructor({ id, question = "", name = "", yesNode = null, noNode = null } = {}) {
-    this.id = TreeNode.claimNodeId(id) ?? TreeNode.createNextNodeId();
+  constructor({ eventBus, question = "", name = "", yesNode = null, noNode = null } = {}) {
+    if (!eventBus || typeof eventBus.GetNextId !== "function") {
+      throw new Error("TreeNode requires an event bus with GetNextId().");
+    }
+    this.eventBus = eventBus;
+    this.id = eventBus.GetNextId();
     this.question = question;
     this.name = name;
     this.yesNode = yesNode;
@@ -218,15 +201,15 @@ export class TreeNode {
     return { start: this.id, nodes };
   }
 
-  static fromRecord(record) {
+  static fromRecord(record, eventBus) {
     return new TreeNode({
-      id: record?.id,
+      eventBus,
       question: record?.question || "",
       name: record?.name || "",
     });
   }
 
-  static restoreGraph(payload) {
+  static restoreGraph(payload, eventBus) {
     const records = payload?.nodes;
     const startId = TreeNode.normalizeNodeId(payload?.start);
 
@@ -251,7 +234,7 @@ export class TreeNode {
         throw new Error(`Missing node record for id: ${normalizedNodeId}`);
       }
 
-      const node = TreeNode.fromRecord(record);
+      const node = TreeNode.fromRecord(record, eventBus);
       restorationLog[normalizedNodeId] = node;
       node.yesNode = restoreNode(record.yesNodeId);
       node.noNode = restoreNode(record.noNodeId);
@@ -259,7 +242,6 @@ export class TreeNode {
     }
 
     const startNode = restoreNode(startId);
-    TreeNode.syncNextNodeId(startNode);
 
     return {
       startNode,
@@ -267,44 +249,41 @@ export class TreeNode {
     };
   }
 
-  static fromLegacyNode(legacyNode) {
+  static fromLegacyNode(legacyNode, eventBus) {
     if (!legacyNode || typeof legacyNode !== "object") {
-      return new TreeNode({ name: "cat" });
+      return new TreeNode({ eventBus, name: "cat" });
     }
 
-    const normalizedId = TreeNode.normalizeNodeId(legacyNode.id);
-
     if (legacyNode.type === "question") {
-      return new TreeNode({
-        id: normalizedId,
+      const questionNode = new TreeNode({
+        eventBus,
         question: legacyNode.question || "",
-        yesNode: TreeNode.fromLegacyNode(legacyNode.yes),
-        noNode: TreeNode.fromLegacyNode(legacyNode.no),
       });
+      questionNode.yesNode = TreeNode.fromLegacyNode(legacyNode.yes, eventBus);
+      questionNode.noNode = TreeNode.fromLegacyNode(legacyNode.no, eventBus);
+      return questionNode;
     }
 
     return new TreeNode({
-      id: normalizedId,
+      eventBus,
       name: legacyNode.animal || legacyNode.name || "cat",
     });
   }
 
-  static createDefault() {
-    return new TreeNode({ name: "cat" });
+  static createDefault(eventBus) {
+    return new TreeNode({ eventBus, name: "cat" });
   }
 
-  static restore(payload) {
+  static restore(payload, eventBus) {
     if (!payload || typeof payload !== "object") {
-      return TreeNode.createDefault();
+      return TreeNode.createDefault(eventBus);
     }
 
     if (payload.start && payload.nodes) {
-      const { startNode } = TreeNode.restoreGraph(payload);
+      const { startNode } = TreeNode.restoreGraph(payload, eventBus);
       return startNode;
     }
 
-    const restoredNode = TreeNode.fromLegacyNode(payload);
-    TreeNode.syncNextNodeId(restoredNode);
-    return restoredNode;
+    return TreeNode.fromLegacyNode(payload, eventBus);
   }
 }

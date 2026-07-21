@@ -1,24 +1,16 @@
-﻿import { EnglishResources } from "./resources.js";
+import { EnglishResources } from "./resources.js";
 import { GermanResources } from "./resources.de.js";
 import { EventIds } from "./event-ids.js";
 
-const DEFAULT_LANGUAGE = "en";
-const LANGUAGE_ALIASES = {
-  ang: "en",
-  angl: "en",
-  english: "en",
-  en: "en",
-  de: "de",
-  german: "de",
-  deutsch: "de",
-};
+export const DEFAULT_LANGUAGE = "en";
+const SUPPORTED_LANGUAGES = new Set(["en", "de"]);
 
 /**
  * Loads localized static resources, picks the language, caches the result,
- * and exposes it through globals plus the event bus.
+ * and exposes it through the event bus.
  *
  * Accepts:
- * - `app-resources-read-requested` with an optional language code or alias.
+ * - `app-resources-read-requested` with a supported language code: `en` or `de`.
  *
  * Emits:
  * - `app-static-resources-changed` with the resolved resources object.
@@ -50,7 +42,7 @@ export class ResourceFactory {
 
   normalizeLanguage(language) {
     const normalized = String(language ?? "").trim().toLowerCase();
-    return LANGUAGE_ALIASES[normalized] || this.resolveLanguage();
+    return SUPPORTED_LANGUAGES.has(normalized) ? normalized : this.resolveLanguage();
   }
 
   createResourceProvider(language = this.resolveLanguage()) {
@@ -63,8 +55,6 @@ export class ResourceFactory {
   loadResources(language = this.resolveLanguage()) {
     const provider = this.createResourceProvider(this.normalizeLanguage(language));
     const loadedResources = provider.getResources();
-    window.resources = loadedResources;
-    window.resourceLanguage = loadedResources.locale;
     return loadedResources;
   }
 

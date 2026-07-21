@@ -1,6 +1,7 @@
 import { EventIds } from "./event-ids.js";
 import { PresenterBase } from "./presenter-base.js";
 
+export const MAIN_PRESENTER_ROOT_ID = "app-root";
 const BOOTSTRAP_MACHINE_ID = "bootstrap-state-machine";
 const SCREEN_BASE = "base";
 const SCREEN_APPLY_STATIC_RESOURCES = "apply-static-resources";

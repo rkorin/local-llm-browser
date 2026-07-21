@@ -1,11 +1,31 @@
-﻿import { EventIds } from "./event-ids.js";
+import { EventIds } from "./event-ids.js";
 
+/**
+ * Game state-machine event contract.
+ *
+ * Accepts / subscribes to:
+ * - tree-root-loaded after requesting the current decision-tree root;
+ * - ui-choice-yes and ui-choice-no while asking animal or branch questions;
+ * - ui-animal-submit while waiting for the animal the user chose;
+ * - llm-response-received and llm-request-failed while validating an animal
+ *   or generating or validating a distinguishing question;
+ * - tree-node-replaced after saving a learned question.
+ *
+ * Emits / publishes:
+ * - tree-root-read-requested to load the decision tree;
+ * - game-question-asked to ask the user a yes/no question;
+ * - llm-request-requested for animal validation and distinguishing-question generation/validation;
+ * - tree-node-replace-requested to persist a learned question and its branches.
+ */
 const DEFAULT_INVALID_ANIMAL_DELAY_MS = 2000;
 const TREE_READ_TIMEOUT_MS = 5000;
 const TREE_REPLACE_TIMEOUT_MS = 5000;
 const MAX_QUESTION_GENERATION_ATTEMPTS = 5;
+const WAIT_FOR_USER_CHOICE_TIMEOUT_MS = 0;
 const WAIT_FOR_USER_ANIMAL_TIMEOUT_MS = 0;
 const VALIDATE_ANIMAL_TIMEOUT_MS = 60000;
+const GENERATE_QUESTION_TIMEOUT_MS = 60000;
+const VALIDATE_GENERATED_QUESTION_TIMEOUT_MS = 60000;
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -128,6 +148,7 @@ export function getGameStateMachineDefinition(context) {
               role: "game",
               text: `Is it ${currentNode.name}?`,
             },
+            WAIT_FOR_USER_CHOICE_TIMEOUT_MS,
           );
 
           if (answerEvent.id === EventIds.uiChoiceYes) {
@@ -167,6 +188,7 @@ export function getGameStateMachineDefinition(context) {
               role: "game",
               text: currentNode.question,
             },
+            WAIT_FOR_USER_CHOICE_TIMEOUT_MS,
           );
 
           if (answerEvent.id === EventIds.uiChoiceYes) {
@@ -248,14 +270,33 @@ export function getGameStateMachineDefinition(context) {
       },
       {
         id: "step-10-generate-question",
-        provider: async (machineContext) => {
+        provider: async (machineContext, machine) => {
           machineContext.questionGenerationAttemptCount += 1;
+          machineContext.generatedQuestion = null;
+          machineContext.generatedQuestionYesAnimal = null;
+          machineContext.generatedQuestionNoAnimal = null;
 
-          const generatedQuestion = await machineContext.generateDistinguishingQuestion();
-          if (generatedQuestion && generatedQuestion.question) {
-            machineContext.generatedQuestion = generatedQuestion.question;
-            machineContext.generatedQuestionYesAnimal = generatedQuestion.yesAnimal;
-            machineContext.generatedQuestionNoAnimal = generatedQuestion.noAnimal;
+          const generateQuestionPrompt = machineContext.resources.prompts.game.generateDistinguishingQuestion(
+            machineContext.failedAnimalName,
+            machineContext.userAnimalName,
+            JSON.stringify(machineContext.generatedQuestionHistory),
+          );
+
+          const responseEvent = await machine.publishAndReceive(
+            EventIds.llmRequestRequested,
+            [EventIds.llmResponseReceived, EventIds.llmRequestFailed],
+            "game-state-machine:step-10-generate-question",
+            generateQuestionPrompt,
+            GENERATE_QUESTION_TIMEOUT_MS,
+          );
+
+          if (responseEvent.id === EventIds.llmResponseReceived) {
+            const generatedQuestion = parseJsonObject(responseEvent.message?.response);
+            if (generatedQuestion) {
+              machineContext.generatedQuestion = String(generatedQuestion.question || "").trim() || null;
+              machineContext.generatedQuestionYesAnimal = normalizeUserAnimalInput(generatedQuestion.yesAnimal) || null;
+              machineContext.generatedQuestionNoAnimal = normalizeUserAnimalInput(generatedQuestion.noAnimal) || null;
+            }
           }
 
           if (machineContext.generatedQuestion) {
@@ -267,11 +308,66 @@ export function getGameStateMachineDefinition(context) {
       },
       {
         id: "step-11-validate-generated-question",
-        provider: async (machineContext) => {
-          const validationResult = await machineContext.validateGeneratedQuestion();
-          if (validationResult === "valid") {
-            return "step-12-save-learned-question";
+        provider: async (machineContext, machine) => {
+          machineContext.generatedQuestionValidationError = null;
+
+          if (
+            !machineContext.generatedQuestion
+            || !machineContext.generatedQuestionYesAnimal
+            || !machineContext.generatedQuestionNoAnimal
+          ) {
+            machineContext.generatedQuestionValidationError = "missing-generated-question-data";
+          } else {
+            const validateQuestionPrompt = machineContext.resources.prompts.game.validateGeneratedQuestion(
+              machineContext.failedAnimalName,
+              machineContext.userAnimalName,
+              machineContext.generatedQuestion,
+              machineContext.generatedQuestionYesAnimal,
+              machineContext.generatedQuestionNoAnimal,
+            );
+
+            const responseEvent = await machine.publishAndReceive(
+              EventIds.llmRequestRequested,
+              [EventIds.llmResponseReceived, EventIds.llmRequestFailed],
+              "game-state-machine:step-11-validate-generated-question",
+              validateQuestionPrompt,
+              VALIDATE_GENERATED_QUESTION_TIMEOUT_MS,
+            );
+
+            if (responseEvent.id === EventIds.llmRequestFailed) {
+              machineContext.generatedQuestionValidationError = "llm-request-failed";
+            } else {
+              const validationPayload = parseJsonObject(responseEvent.message?.response);
+              if (!validationPayload) {
+                machineContext.generatedQuestionValidationError = "model-did-not-return-json";
+              } else if (validationPayload.isValid !== true) {
+                machineContext.generatedQuestionValidationError = String(validationPayload.reasonCode || "invalid");
+              } else {
+                const normalizedQuestion = String(validationPayload.normalizedQuestion || "").trim();
+                const yesAnimal = normalizeUserAnimalInput(validationPayload.yesAnimal);
+                const noAnimal = normalizeUserAnimalInput(validationPayload.noAnimal);
+                const expectedAnimals = [
+                  normalizeUserAnimalInput(machineContext.failedAnimalName),
+                  normalizeUserAnimalInput(machineContext.userAnimalName),
+                ].sort();
+                const validatedAnimals = [yesAnimal, noAnimal].sort();
+
+                if (!normalizedQuestion) {
+                  machineContext.generatedQuestionValidationError = "validator-returned-empty-question";
+                } else if (yesAnimal === noAnimal) {
+                  machineContext.generatedQuestionValidationError = "validator-returned-same-animals";
+                } else if (JSON.stringify(validatedAnimals) !== JSON.stringify(expectedAnimals)) {
+                  machineContext.generatedQuestionValidationError = "validator-returned-unexpected-animals";
+                } else {
+                  machineContext.generatedQuestion = normalizedQuestion;
+                  machineContext.generatedQuestionYesAnimal = yesAnimal;
+                  machineContext.generatedQuestionNoAnimal = noAnimal;
+                  return "step-12-save-learned-question";
+                }
+              }
+            }
           }
+
           if (machineContext.questionGenerationAttemptCount >= MAX_QUESTION_GENERATION_ATTEMPTS) {
             return "finish-lost";
           }
