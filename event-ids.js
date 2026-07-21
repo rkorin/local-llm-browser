@@ -11,7 +11,6 @@ export const EventIds = {
   // Tree commands.
   treeRootReadRequested: "tree-root-read-requested",
   treeRootSaveRequested: "tree-root-save-requested",
-  treeRootResetRequested: "tree-root-reset-requested",
   treeNodeReplaceRequested: "tree-node-replace-requested",
 
   // Tree updates.
@@ -53,7 +52,6 @@ export const EventIds = {
 
   // Main screen UI commands.
   uiDebugToggleRequested: "ui-debug-toggle-requested",
-  uiResetTreeRequested: "ui-reset-tree-requested",
 
   // Game UI commands.
   uiChoiceYes: "ui-choice-yes",

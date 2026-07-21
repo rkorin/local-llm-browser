@@ -29,9 +29,6 @@ function createMemoryStorage(initialValue = null) {
     setItem(key, value) {
       data.set(key, value);
     },
-    removeItem(key) {
-      data.delete(key);
-    },
   };
 }
 
@@ -136,22 +133,7 @@ export function runTreeRepositoryTests() {
       assertEqual(restoredRoot.noNode.name, "cat", "Saving should persist the no child node");
       assertEqual(typeof restoredRoot.id, "number", "Restored nodes should receive numeric runtime ids");
     }),
-    runTest("tree-repository-007 reset command clears storage and emits the default root", async () => {
-      const serializationBus = new EventMessageBus();
-      const eventBus = new EventMessageBus();
-      const storage = createMemoryStorage(JSON.stringify(new TreeNode({ eventBus: serializationBus, name: "owl" }).serializeGraph()));
-      const repository = new TreeRepository({ eventBus, storageKey: "tree-key", storage });
-      const loadedPromise = waitForEvent(eventBus, EventIds.treeRootLoaded);
-
-      eventBus.publish(EventIds.treeRootResetRequested, null);
-      const loadedEvent = await loadedPromise;
-
-      assertEqual(storage.getItem("tree-key"), null, "Reset should remove the serialized tree from storage");
-      assertEqual(repository.rootNode.name, "cat", "Reset should restore the cached root node to the default tree");
-      assertEqual(typeof repository.rootNode.id, "number", "Reset root should have a numeric runtime id");
-      assertEqual(loadedEvent.message.name, "cat", "Reset should emit the default root tree through tree-root-loaded");
-    }),
-    runTest("tree-repository-008 save command rejects non-TreeNode payloads", async () => {
+    runTest("tree-repository-007 save command rejects non-TreeNode payloads", async () => {
       const eventBus = new EventMessageBus();
       const storage = createMemoryStorage();
       new TreeRepository({ eventBus, storageKey: "tree-key", storage });
@@ -162,7 +144,7 @@ export function runTreeRepositoryTests() {
       );
     }),
 
-    runTest("tree-repository-009 replace command swaps the root animal node and emits tree-node-replaced", async () => {
+    runTest("tree-repository-008 replace command swaps the root animal node and emits tree-node-replaced", async () => {
       const serializationBus = new EventMessageBus();
       const eventBus = new EventMessageBus();
       const storage = createMemoryStorage(JSON.stringify(new TreeNode({ eventBus: serializationBus, name: "cat" }).serializeGraph()));
@@ -186,7 +168,7 @@ export function runTreeRepositoryTests() {
       assertEqual(repository.rootNode.noNode.name, "cat", "Replace should create the no animal child");
       assertEqual(replacedEvent.message.question, "Does it bark?", "Replace should emit the updated root tree");
     }),
-    runTest("tree-repository-010 replace command finds a nested node by runtime id and updates only that branch", async () => {
+    runTest("tree-repository-009 replace command finds a nested node by runtime id and updates only that branch", async () => {
       const serializationBus = new EventMessageBus();
       const savedRoot = new TreeNode({
         eventBus: serializationBus,
@@ -214,7 +196,7 @@ export function runTreeRepositoryTests() {
       assertEqual(repository.rootNode.noNode.noNode.id, 6, "Nested replacement no child should get the next runtime id");
       assertEqual(repository.rootNode.noNode.yesNode.name, "dog", "Nested replace should wire the new yes animal into the targeted branch");
     }),
-    runTest("tree-repository-011 every restore assigns fresh ids from the shared event bus", async () => {
+    runTest("tree-repository-010 every restore assigns fresh ids from the shared event bus", async () => {
       const payload = {
         start: 20,
         nodes: {

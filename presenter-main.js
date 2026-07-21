@@ -62,7 +62,7 @@ const PROVIDER_PROGRESS_SCREENS = new Set([
  * Emits:
  * - `app-resources-read-requested` when the language changes
  * - `ui-debug-toggle-requested` when the debug button is clicked
- * - `ui-reset-tree-requested` when the reset button is clicked
+
  * - `ui-restart-requested` when the start game button is clicked
  */
 export class MainPresenter extends PresenterBase {
@@ -77,7 +77,7 @@ export class MainPresenter extends PresenterBase {
     this.statusElement = this.findById("status-text");
     this.startGameButtonElement = this.findById("start-game-button");
     this.debugToggleButtonElement = this.findById("debug-toggle-button");
-    this.resetTreeButtonElement = this.findById("reset-tree-button");
+
     this.resources = null;
     this.currentScreen = SCREEN_BASE;
     this.initialize();
@@ -96,13 +96,11 @@ export class MainPresenter extends PresenterBase {
       this.publish(EventIds.uiRestartRequested, null);
     });
 
+    // The entry point remains wired for the future independent debug observer, but its button is hidden in HTML.
     this.listen(this.debugToggleButtonElement, "click", () => {
       this.publish(EventIds.uiDebugToggleRequested, null);
     });
 
-    this.listen(this.resetTreeButtonElement, "click", () => {
-      this.publish(EventIds.uiResetTreeRequested, null);
-    });
 
     this.subscribeMany([
       {
@@ -206,7 +204,7 @@ export class MainPresenter extends PresenterBase {
     this.statusTitleElement.textContent = resources.ui.statusTitle;
     this.startGameButtonElement.textContent = resources.ui.startGameButton;
     this.debugToggleButtonElement.textContent = resources.ui.debugButton;
-    this.resetTreeButtonElement.textContent = resources.ui.resetBaseButton;
+
   }
 
   renderCurrentScreen() {

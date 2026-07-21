@@ -56,12 +56,17 @@ const ENGLISH_RESOURCES = {
   game: {
     messages: {
       roundStarted: "Let us play. Think of an animal and I will try to guess it.",
-      lostAskAnimal: "I did not guess it. Which animal did you choose?",
+      lostAskAnimal: "I could not guess your animal. Which animal were you thinking of?",
+      validatingAnimalInput: "Let me check that...",
+      invalidAnimalInput: "Very funny. Give me one clear, common animal name in English, and make sure it is different from the animal I just guessed.",
+      generatingQuestion: "Let me think about that...",
+      validatingQuestion: "One moment, I am checking something...",
+      savingLearning: "Almost done...",
     },
     finished: {
-      won: "You won.",
-      lost: "You lost.",
-      invalid: "Game finished with an invalid state.",
+      won: "I guessed it!",
+      lost: "I did not guess your animal this time.",
+      invalid: "Something went wrong, so I had to stop this round. You can try again.",
       closed: "The game session is closed. Press F5 to start again.",
     },
   },
@@ -130,7 +135,60 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-004 step 7 appends lost messages and shows input", async () => {
+    runTest("presenter-game-004 first choice click hides controls and blocks duplicate answers", async () => {
+      const fixture = createGamePresenterFixture();
+      const choices = [];
+      fixture.eventBus.subscribe(EventIds.uiChoiceYes, "test:game-panel:choice-lock:yes", (event) => {
+        choices.push(event);
+      });
+      fixture.eventBus.subscribe(EventIds.uiChoiceNo, "test:game-panel:choice-lock:no", (event) => {
+        choices.push(event);
+      });
+
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
+        role: "game",
+        text: "Is it cat?",
+      });
+
+      fixture.root.querySelector("#yes-button").click();
+      fixture.root.querySelector("#no-button").click();
+      fixture.root.querySelector("#yes-button").click();
+
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice controls immediately after the first answer");
+      assertEqual(choices.length, 1, "GamePresenter should publish only one answer while leaving the choice screen");
+      assertEqual(choices[0].id, EventIds.uiChoiceYes, "GamePresenter should preserve the first selected answer");
+
+      fixture.cleanup();
+    }),
+    runTest("presenter-game-005 first animal submit hides input and blocks duplicate submissions", async () => {
+      const fixture = createGamePresenterFixture();
+      const submissions = [];
+      fixture.eventBus.subscribe(EventIds.uiAnimalSubmit, "test:game-panel:animal-lock", (event) => {
+        submissions.push(event);
+      });
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+      fixture.root.querySelector("#animal-input").value = "whale";
+
+      fixture.root.querySelector("#submit-animal-button").click();
+      fixture.root.querySelector("#submit-animal-button").click();
+      fixture.root.querySelector("#animal-input").dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }));
+
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should hide animal input immediately after the first submission");
+      assertEqual(submissions.length, 1, "GamePresenter should publish only one animal submission while leaving the input screen");
+      assertEqual(submissions[0].message, "whale", "GamePresenter should preserve the first submitted animal value");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-006 step 7 asks for the missed animal once and shows input", async () => {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
@@ -151,16 +209,143 @@ export function runGamePresenterTests() {
         currentNodeId: "step-7-request-user-animal",
       });
 
-      assertEqual(fixture.root.querySelector("#chat-log").children.length, 4, "GamePresenter should append two new bubbles when step 7 starts");
-      assertEqual(fixture.root.querySelector("#chat-log").children[2].textContent, "You lost.", "GamePresenter should report that the round was lost at step 7");
-      assertEqual(fixture.root.querySelector("#chat-log").children[3].textContent, "I did not guess it. Which animal did you choose?", "GamePresenter should ask the user for the animal name at step 7");
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 3, "GamePresenter should append one animal request when step 7 starts");
+      assertEqual(fixture.root.querySelector("#chat-log").children[2].textContent, "I could not guess your animal. Which animal were you thinking of?", "GamePresenter should ask the user for the animal name at step 7");
       assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide yes/no controls at step 7");
       assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should show the input row at step 7");
 
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-005 interaction-state event switches to input mode and clears input field", async () => {
+    runTest("presenter-game-007 steps 8 and 9 hide input until step 7 accepts a retry", async () => {
+      const fixture = createGamePresenterFixture();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+      fixture.root.querySelector("#animal-input").value = "dragon";
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-7-request-user-animal",
+        currentNodeId: "step-8-validate-user-animal",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append validation progress at step 8");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "Let me check that...", "GamePresenter should append the localized validation-progress message at step 8");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should hide animal input while step 8 validates it");
+      assertEqual(fixture.root.querySelector("#animal-input").value, "dragon", "GamePresenter should preserve the hidden submitted value until validation finishes");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-8-validate-user-animal",
+        currentNodeId: "step-9-report-invalid-animal",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should replace validation progress with exactly one feedback message at step 9");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "Very funny. Give me one clear, common animal name in English, and make sure it is different from the animal I just guessed.", "GamePresenter should replace validation progress with the localized invalid-animal message at step 9");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should keep animal input hidden while step 9 delays the retry");
+      assertEqual(fixture.root.querySelector("#animal-input").value, "dragon", "GamePresenter should not expose or clear input before the state machine waits for another submission");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-9-report-invalid-animal",
+        currentNodeId: "step-7-request-user-animal",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should not repeat the animal prompt after step 9 returns to step 7");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should expose a fresh input only after step 7 starts waiting again");
+      assertEqual(fixture.root.querySelector("#animal-input").value, "", "GamePresenter should clear the rejected value when step 7 exposes the fresh input");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-16-restart-or-close",
+        currentNodeId: "step-1-start-round",
+      });
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should ask for the missed animal again in a new round");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "I could not guess your animal. Which animal were you thinking of?", "GamePresenter should reset its per-round animal-request flag at step 1");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-008 steps 10 through 12 update one progress bubble without chat spam", async () => {
+      const fixture = createGamePresenterFixture();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+      fixture.root.querySelector("#animal-input").value = "whale";
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-7-request-user-animal",
+        currentNodeId: "step-8-validate-user-animal",
+      });
+
+      const progressBubble = fixture.root.querySelector("#chat-log").children[1];
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-8-validate-user-animal",
+        currentNodeId: "step-10-generate-question",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should reuse the animal-validation progress bubble at step 10");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1], progressBubble, "GamePresenter should preserve progress bubble identity at step 10");
+      assertEqual(progressBubble.textContent, "Let me think about that...", "GamePresenter should show question-generation progress at step 10");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-10-generate-question",
+        currentNodeId: "step-11-validate-generated-question",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should not append another bubble at step 11");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1], progressBubble, "GamePresenter should preserve progress bubble identity at step 11");
+      assertEqual(progressBubble.textContent, "One moment, I am checking something...", "GamePresenter should show question-validation progress at step 11");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-11-validate-generated-question",
+        currentNodeId: "step-10-generate-question",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should update rather than append when step 11 retries step 10");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1], progressBubble, "GamePresenter should keep the same progress bubble across retries");
+      assertEqual(progressBubble.textContent, "Let me think about that...", "GamePresenter should restore generation progress on retry");
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-10-generate-question",
+        currentNodeId: "step-11-validate-generated-question",
+      });
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-11-validate-generated-question",
+        currentNodeId: "step-12-save-learned-question",
+      });
+
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should not append another bubble at step 12");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1], progressBubble, "GamePresenter should preserve progress bubble identity while saving");
+      assertEqual(progressBubble.textContent, "Almost done...", "GamePresenter should show saving progress at step 12");
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice controls during learning");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should hide input controls during learning");
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide lifecycle controls during learning");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-009 interaction-state event switches to input mode and clears input field", async () => {
       const fixture = createGamePresenterFixture();
       fixture.root.querySelector("#animal-input").value = "old value";
 
@@ -174,9 +359,15 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-006 game-finished shows result screen with retry and close actions", async () => {
+    runTest("presenter-game-010 game-finished shows result screen with retry and close actions", async () => {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+
+      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+        role: "game",
+        message: "Previous round message",
+      });
+      const previousBubble = fixture.root.querySelector("#chat-log").children[0];
 
       fixture.eventBus.publish(EventIds.gameFinished, {
         result: "won",
@@ -184,14 +375,92 @@ export function runGamePresenterTests() {
 
       assertEqual(fixture.root.classList.contains("hidden"), false, "GamePresenter should show the game panel for the result screen");
       assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), false, "GamePresenter should show retry/close actions after game-finished");
-      assertEqual(fixture.root.querySelector("#chat-log").children[0].textContent, "You won.", "GamePresenter should render the localized final result message");
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append the final result without clearing round history");
+      assertEqual(fixture.root.querySelector("#chat-log").children[0], previousBubble, "GamePresenter should preserve existing round messages at game-finished");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "I guessed it!", "GamePresenter should append the localized final result message from the game perspective");
 
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-007 game-closed shows static closed message and hides actions", async () => {
+    runTest("presenter-game-011 invalid result replaces progress with an incremental retryable error", async () => {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+        role: "game",
+        message: "Previous round message",
+      });
+      const previousBubble = fixture.root.querySelector("#chat-log").children[0];
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-7-request-user-animal",
+        currentNodeId: "step-8-validate-user-animal",
+      });
+
+      let retryEvent = null;
+      fixture.eventBus.subscribe(EventIds.uiGameRetryRequested, "test:game-panel:error-retry", (event) => {
+        retryEvent = event;
+      });
+      fixture.eventBus.publish(EventIds.gameFinished, {
+        result: "invalid",
+      });
+
+      const chat = fixture.root.querySelector("#chat-log");
+      assertEqual(chat.children.length, 2, "GamePresenter should remove transient progress and append one error without clearing history");
+      assertEqual(chat.children[0], previousBubble, "GamePresenter should preserve existing round messages on invalid result");
+      assertEqual(chat.children[1].textContent, "Something went wrong, so I had to stop this round. You can try again.", "GamePresenter should append the localized user-facing error");
+      assertEqual(chat.children[1].classList.contains("error"), true, "GamePresenter should visually mark the invalid result as an error");
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), false, "GamePresenter should allow retry or close from the error screen");
+
+      fixture.root.querySelector("#restart-button").click();
+
+      assertEqual(retryEvent?.id, EventIds.uiGameRetryRequested, "GamePresenter should publish retry from the error screen");
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should lock error actions immediately after retry");
+
+      fixture.cleanup();
+    }),
+    runTest("presenter-game-012 first result action hides controls and blocks competing lifecycle actions", async () => {
+      const fixture = createGamePresenterFixture();
+      const lifecycleActions = [];
+      fixture.eventBus.subscribe(EventIds.uiGameRetryRequested, "test:game-panel:lifecycle-lock:retry", (event) => {
+        lifecycleActions.push(event);
+      });
+      fixture.eventBus.subscribe(EventIds.uiGameCloseRequested, "test:game-panel:lifecycle-lock:close", (event) => {
+        lifecycleActions.push(event);
+      });
+      fixture.eventBus.publish(EventIds.gameFinished, {
+        result: "won",
+      });
+
+      fixture.root.querySelector("#restart-button").click();
+      fixture.root.querySelector("#close-game-button").click();
+      fixture.root.querySelector("#restart-button").click();
+
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide result actions immediately after retry");
+      assertEqual(lifecycleActions.length, 1, "GamePresenter should publish only the first lifecycle action from one result screen");
+      assertEqual(lifecycleActions[0].id, EventIds.uiGameRetryRequested, "GamePresenter should preserve the first retry action");
+
+      fixture.eventBus.publish(EventIds.gameFinished, {
+        result: "lost",
+      });
+      fixture.root.querySelector("#close-game-button").click();
+      fixture.root.querySelector("#restart-button").click();
+
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide result actions immediately after close");
+      assertEqual(lifecycleActions.length, 2, "GamePresenter should accept one new lifecycle action after a new result screen");
+      assertEqual(lifecycleActions[1].id, EventIds.uiGameCloseRequested, "GamePresenter should preserve the first close action");
+
+      fixture.cleanup();
+    }),
+
+    runTest("presenter-game-013 game-closed shows static closed message and hides actions", async () => {
+      const fixture = createGamePresenterFixture();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
+
+      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+        role: "game",
+        message: "Existing result",
+      });
+      const existingBubble = fixture.root.querySelector("#chat-log").children[0];
 
       fixture.eventBus.publish(EventIds.gameClosed, {
         result: "won",
@@ -199,31 +468,66 @@ export function runGamePresenterTests() {
 
       assertEqual(fixture.root.classList.contains("hidden"), false, "GamePresenter should keep the panel visible in the closed static state");
       assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide retry/close actions after the session is closed");
-      assertEqual(fixture.root.querySelector("#chat-log").children[0].textContent, "The game session is closed. Press F5 to start again.", "GamePresenter should render the static closed message");
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append the closed message without clearing history");
+      assertEqual(fixture.root.querySelector("#chat-log").children[0], existingBubble, "GamePresenter should preserve the existing result when the session closes");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "The game session is closed. Press F5 to start again.", "GamePresenter should append the static closed message");
 
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-008 clicks publish game UI events through the event bus", async () => {
+    runTest("presenter-game-014 clicks publish game UI events through the event bus", async () => {
       const fixture = createGamePresenterFixture();
       const published = [];
       fixture.eventBus.subscribe("all", "test:game-panel:published", (event) => {
         published.push(event);
       });
-      fixture.root.querySelector("#animal-input").value = "whale";
 
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
+        role: "game",
+        text: "First question?",
+      });
       fixture.root.querySelector("#yes-button").click();
+
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
+        role: "game",
+        text: "Second question?",
+      });
       fixture.root.querySelector("#no-button").click();
+
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
+      fixture.root.querySelector("#animal-input").value = "whale";
       fixture.root.querySelector("#submit-animal-button").click();
+
+      fixture.eventBus.publish(EventIds.gameFinished, {
+        result: "won",
+      });
       fixture.root.querySelector("#restart-button").click();
+
+      fixture.eventBus.publish(EventIds.gameFinished, {
+        result: "lost",
+      });
       fixture.root.querySelector("#close-game-button").click();
 
-      assertEqual(published[0].id, EventIds.uiChoiceYes, "GamePresenter should publish uiChoiceYes on yes click");
-      assertEqual(published[1].id, EventIds.uiChoiceNo, "GamePresenter should publish uiChoiceNo on no click");
-      assertEqual(published[2].id, EventIds.uiAnimalSubmit, "GamePresenter should publish uiAnimalSubmit on submit click");
-      assertEqual(published[2].message, "whale", "GamePresenter should publish the current animal input value");
-      assertEqual(published[3].id, EventIds.uiGameRetryRequested, "GamePresenter should publish uiGameRetryRequested on retry click");
-      assertEqual(published[4].id, EventIds.uiGameCloseRequested, "GamePresenter should publish uiGameCloseRequested on close click");
+      const uiEvents = published.filter((event) => [
+        EventIds.uiChoiceYes,
+        EventIds.uiChoiceNo,
+        EventIds.uiAnimalSubmit,
+        EventIds.uiGameRetryRequested,
+        EventIds.uiGameCloseRequested,
+      ].includes(event.id));
+
+      assertEqual(uiEvents[0].id, EventIds.uiChoiceYes, "GamePresenter should publish uiChoiceYes on yes click");
+      assertEqual(uiEvents[1].id, EventIds.uiChoiceNo, "GamePresenter should publish uiChoiceNo on no click");
+      assertEqual(uiEvents[2].id, EventIds.uiAnimalSubmit, "GamePresenter should publish uiAnimalSubmit on submit click");
+      assertEqual(uiEvents[2].message, "whale", "GamePresenter should publish the current animal input value");
+      assertEqual(uiEvents[3].id, EventIds.uiGameRetryRequested, "GamePresenter should publish uiGameRetryRequested on retry click");
+      assertEqual(uiEvents[4].id, EventIds.uiGameCloseRequested, "GamePresenter should publish uiGameCloseRequested on close click");
 
       fixture.cleanup();
     }),

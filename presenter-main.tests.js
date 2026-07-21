@@ -23,8 +23,8 @@ function createMainPresenterFixture() {
     <div id="progress-bar"></div>
     <div id="status-text"></div>
     <button id="start-game-button" type="button" class="hidden"></button>
-    <button id="debug-toggle-button" type="button"></button>
-    <button id="reset-tree-button" type="button"></button>
+    <button id="debug-toggle-button" type="button" class="hidden"></button>
+
   `;
   document.body.appendChild(root);
 
@@ -54,7 +54,7 @@ const ENGLISH_RESOURCES = {
     },
     startGameButton: "Start Game",
     debugButton: "Debug",
-    resetBaseButton: "Reset Base",
+
     statusTitle: "Status",
   },
   providers: {
@@ -90,7 +90,8 @@ export function runMainPresenterTests() {
       assertEqual(fixture.root.querySelector("#status-title").textContent, "Status", "MainPresenter should render the status title from resources");
       assertEqual(fixture.root.querySelector("#start-game-button").textContent, "Start Game", "MainPresenter should render the start game button label from resources");
       assertEqual(fixture.root.querySelector("#debug-toggle-button").textContent, "Debug", "MainPresenter should render the debug button label from resources");
-      assertEqual(fixture.root.querySelector("#reset-tree-button").textContent, "Reset Base", "MainPresenter should render the reset button label from resources");
+      assertEqual(fixture.root.querySelector("#debug-toggle-button").classList.contains("hidden"), true, "The unfinished debug entry point should remain hidden");
+
 
       fixture.cleanup();
     }),

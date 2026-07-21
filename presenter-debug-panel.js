@@ -3,7 +3,21 @@ import { PresenterBase } from "./presenter-base.js";
 
 export const DEBUG_PANEL_PRESENTER_ROOT_ID = "debug-panel";
 
-export class DebugPanelPresenter extends PresenterBase {
+/**
+ * Debug panel event contract.
+ *
+ * Accepts / subscribes to:
+ * - `app-static-resources-changed` to localize debug-panel labels.
+ * - `debug-context-changed` to render the supplied debug snapshot.
+ *
+ * Emits / publishes:
+ * - `ui-debug-rerun-requested` when the user requests a prompt replay.
+ *
+ * Planned role:
+ * - remain independent from bootstrap and game orchestration;
+ * - observe the complete event stream and render it in the adjacent panel;
+ * - stay hidden until that standalone observer flow is implemented.
+ */export class DebugPanelPresenter extends PresenterBase {
   constructor(config = {}) {
     super(config);
     this.debugTitleElement = this.findById("debug-title");

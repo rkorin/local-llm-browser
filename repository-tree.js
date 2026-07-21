@@ -14,11 +14,10 @@ export const DEFAULT_TREE_STORAGE_KEY = "animal-question-tree-v1";
  * Accepts:
  * - `tree-root-read-requested` to restore the root `TreeNode` from storage and cache it locally.
  * - `tree-root-save-requested` with the root `TreeNode`; saves that root node and all children to storage.
- * - `tree-root-reset-requested` to clear storage, restore the default root node, and cache it locally.
  * - `tree-node-replace-requested` with a target animal node id plus a new question payload.
  *
  * Emits:
- * - `tree-root-loaded` with the current root `TreeNode` after read or reset.
+ * - `tree-root-loaded` with the current root `TreeNode` after read.
  * - `tree-node-replaced` with the updated root `TreeNode` after a learning replacement.
  */
 export class TreeRepository {
@@ -33,8 +32,8 @@ export class TreeRepository {
     if (typeof storageKey !== "string" || !storageKey.trim()) {
       throw new Error("TreeRepository requires a non-empty storageKey.");
     }
-    if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function" || typeof storage.removeItem !== "function") {
-      throw new Error("TreeRepository requires a storage adapter with getItem/setItem/removeItem.");
+    if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function") {
+      throw new Error("TreeRepository requires a storage adapter with getItem/setItem.");
     }
 
     this.eventBus = eventBus;
@@ -48,9 +47,7 @@ export class TreeRepository {
     this.eventBus.subscribe(EventIds.treeRootSaveRequested, "TreeRepository:save", (event) => {
       this.handleSaveRequested(event.message);
     });
-    this.eventBus.subscribe(EventIds.treeRootResetRequested, "TreeRepository:reset", () => {
-      this.handleResetRequested();
-    });
+
     this.eventBus.subscribe(EventIds.treeNodeReplaceRequested, "TreeRepository:replace", (event) => {
       this.handleReplaceRequested(event.message);
     });
@@ -89,14 +86,6 @@ export class TreeRepository {
     }
 
     return this.persistRootNode(rootNode);
-  }
-
-  handleResetRequested() {
-    const defaultRootNode = TreeNode.createDefault(this.eventBus);
-    this.storage.removeItem(this.storageKey);
-    this.rootNode = defaultRootNode;
-    this.eventBus.publish(EventIds.treeRootLoaded, defaultRootNode);
-    return defaultRootNode;
   }
 
   handleReplaceRequested(payload) {
