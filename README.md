@@ -8,7 +8,7 @@ The application plays a Yes/No animal-guessing game over a persistent decision t
 
 The default provider runs **Llama 3.2 3B Instruct directly in the browser** through WebLLM and WebGPU. The default path requires no dedicated application backend, no API key, and no build step.
 
-> **Project status:** active development. The runtime composition and core learning workflow are implemented; fresh-clone end-to-end verification and final public packaging are still in progress.
+> **Project status:** active development. The core runtime, learning workflow, local LLM integration, and automated component tests are implemented. Additional end-to-end verification, diagnostics, and public demo materials are in progress.
 
 ## Why This Project Exists
 
@@ -223,7 +223,7 @@ Running the model in the browser improves privacy and removes per-request API de
 * The OpenAI-compatible provider still needs neutral external configuration and a public selection mechanism.
 * The debug presenter exists, but the independent all-events observer and public debug workflow are not finished.
 * The project does not currently claim full cross-browser support, production deployment, streaming generation, model training, or fine-tuning.
-* Final fresh-clone browser smoke testing, screenshots/GIF, and repository licensing are still pending.
+* Final fresh-clone browser smoke testing and public demo materials are still in progress.
 
 ## Next Steps
 
@@ -232,7 +232,7 @@ Running the model in the browser improves privacy and removes per-request API de
 * add a deterministic end-to-end provider or fixture for the full learning workflow;
 * expose safe OpenAI-compatible provider configuration;
 * complete the event-observer/debug workflow;
-* add a screenshot or short demo GIF and choose a repository license.
+* add a screenshot or short demo GIF.
 
 ## Project Provenance
 

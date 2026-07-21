@@ -107,7 +107,7 @@ export class EnglishResources {
         validatorReturnedEmptyQuestion: "Validator returned an empty question.",
         modelReturnedEmptyHelloResponse: "Model returned an empty response to the hello check.",
         webGpuUnavailable: "WebGPU is not available in this browser. Try a recent Chrome, Edge, or another browser with WebGPU enabled.",
-        fileProtocolUnsupported: "This page is being opened with file://. Run the demo from C:\\work-poc\\portfolio\\local-llm-browser with `python -m http.server 8080` and open http://localhost:8080.",
+        fileProtocolUnsupported: "This page is being opened with file://. From the project directory, run `python -m http.server 8080` and open http://localhost:8080.",
         remoteConfigFetchFailed: (modelUrl, errorMessage) => `Could not fetch remote model config from ${modelUrl}. Original error: ${errorMessage}`,
         remoteConfigUnavailable: (modelUrl) => `Remote model config is not reachable at ${modelUrl}/resolve/main/mlc-chat-config.json.`,
         remoteLibraryFetchFailed: (libraryUrl, errorMessage) => `Could not fetch ${libraryUrl}. Make sure model_lib.wasm exists and is reachable over HTTP. Original error: ${errorMessage}`,

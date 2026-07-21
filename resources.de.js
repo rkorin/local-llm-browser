@@ -107,7 +107,7 @@ export class GermanResources {
         validatorReturnedEmptyQuestion: "Der Validator hat eine leere Frage zurueckgegeben.",
         modelReturnedEmptyHelloResponse: "Das Modell hat auf die Hello-Pruefung leer geantwortet.",
         webGpuUnavailable: "WebGPU ist in diesem Browser nicht verfuegbar. Verwende eine aktuelle Version von Chrome, Edge oder einen anderen Browser mit aktiviertem WebGPU.",
-        fileProtocolUnsupported: "Diese Seite wird mit file:// geoeffnet. Starte die Demo aus C:\\work-poc\\portfolio\\local-llm-browser mit `python -m http.server 8080` und oeffne http://localhost:8080.",
+        fileProtocolUnsupported: "Diese Seite wird mit file:// geoeffnet. Fuehre im Projektverzeichnis `python -m http.server 8080` aus und oeffne http://localhost:8080.",
         remoteConfigFetchFailed: (modelUrl, errorMessage) => `Die Remote-Modellkonfiguration von ${modelUrl} konnte nicht geladen werden. Urspruenglicher Fehler: ${errorMessage}`,
         remoteConfigUnavailable: (modelUrl) => `Die Remote-Modellkonfiguration ist unter ${modelUrl}/resolve/main/mlc-chat-config.json nicht erreichbar.`,
         remoteLibraryFetchFailed: (libraryUrl, errorMessage) => `Die Datei ${libraryUrl} konnte nicht geladen werden. Stelle sicher, dass model_lib.wasm existiert und ueber HTTP erreichbar ist. Urspruenglicher Fehler: ${errorMessage}`,
