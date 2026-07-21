@@ -52,13 +52,6 @@ export class EnglishResources {
         checkingModelResponse: "Checking model response...",
       },
       game: {
-        validationMessages: {
-          not_an_animal: "That does not look like a real animal name. Type one common animal name in English.",
-          same_as_failed_animal: "That is the same animal I already guessed. Type a different animal.",
-          unclear: "That input is too unclear. Type one common animal name in English.",
-          not_english_common_name: "Use one common animal name in English.",
-          default: "Type one common animal name in English.",
-        },
         messages: {
           roundStarted: "Let us play. Think of an animal and I will try to guess it.",
           animalGuessQuestion: (animalLabel) => `Is it ${animalLabel}?`,
@@ -69,8 +62,6 @@ export class EnglishResources {
           generatingQuestion: "Let me think about that...",
           validatingQuestion: "One moment, I am checking something...",
           savingLearning: "Almost done...",
-          learningSaved: (question) => `Got it. I will remember this question: ${question}`,
-          learningFailed: "I could not learn a good new question this time.",
         },
         finished: {
           won: "I guessed it!",

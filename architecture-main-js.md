@@ -872,18 +872,6 @@ Payload intent:
 
 - the complete current chat state or an explicit append instruction
 
-#### `game-chat-cleared`
-
-Potential senders:
-
-- `GameStateMachine`
-- or a dedicated game runtime object
-
-Potential listeners:
-
-- `GamePresenter`
-- `GlobalTracer`
-
 ### Debug Events
 
 #### `debug-panel-open-requested`

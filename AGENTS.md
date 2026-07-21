@@ -16,9 +16,7 @@ Use:
 - if `rg` is not available, use `Get-ChildItem -Recurse -File | Select-String`
 - `py -3` instead of `python`
 
-- Preferred environment bootstrap:
-  (C:\\Users\\rkorin\\miniconda3\\shell\\condabin\\conda-hook.ps1) ; (conda activate tf)
-  
+ 
 - `where.exe` to check commands
 
 Do not use `apply_patch`.

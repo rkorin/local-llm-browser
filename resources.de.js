@@ -52,13 +52,6 @@ export class GermanResources {
         checkingModelResponse: "Modellantwort wird geprueft...",
       },
       game: {
-        validationMessages: {
-          not_an_animal: "Das sieht nicht wie ein echter Tiername aus. Gib einen gaengigen Tiernamen auf Englisch ein.",
-          same_as_failed_animal: "Das ist dasselbe Tier, das ich schon geraten habe. Gib ein anderes Tier ein.",
-          unclear: "Diese Eingabe ist zu unklar. Gib einen gaengigen Tiernamen auf Englisch ein.",
-          not_english_common_name: "Verwende einen gaengigen Tiernamen auf Englisch.",
-          default: "Gib einen gaengigen Tiernamen auf Englisch ein.",
-        },
         messages: {
           roundStarted: "Lass uns spielen. Denke an ein Tier und ich versuche es zu erraten.",
           animalGuessQuestion: (animalLabel) => `Ist es ${animalLabel}?`,
@@ -69,8 +62,6 @@ export class GermanResources {
           generatingQuestion: "Lass mich darueber nachdenken...",
           validatingQuestion: "Einen Moment, ich pruefe etwas...",
           savingLearning: "Fast fertig...",
-          learningSaved: (question) => `Verstanden. Ich merke mir diese Frage: ${question}`,
-          learningFailed: "Diesmal konnte ich keine gute neue Frage lernen.",
         },
         finished: {
           won: "Ich habe es erraten!",

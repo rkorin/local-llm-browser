@@ -1,4 +1,4 @@
-import { EventIds } from "./event-ids.js";
+﻿import { EventIds } from "./event-ids.js";
 
 /**
  * Game state-machine event contract.
@@ -13,9 +13,10 @@ import { EventIds } from "./event-ids.js";
  *
  * Emits / publishes:
  * - tree-root-read-requested to load the decision tree;
- * - game-question-asked to ask the user a yes/no question;
+ * - game-question-asked only for the user-visible yes/no prompts at steps 3 and 6;
  * - llm-request-requested for animal validation and distinguishing-question generation/validation;
  * - tree-node-replace-requested to persist a learned question and its branches.
+ * - state-machine-transitioned is published automatically by the base StateMachine before every node.
  */
 const DEFAULT_INVALID_ANIMAL_DELAY_MS = 2000;
 const TREE_READ_TIMEOUT_MS = 5000;
@@ -88,6 +89,21 @@ function parseJsonObject(text) {
   }
 }
 
+function animalGuessQuestionOf(resources, animalLabel) {
+  return resources?.game?.messages?.animalGuessQuestion?.(animalLabel)
+    || `Is it ${animalLabel}?`;
+}
+
+function branchQuestionTextOf(resources, questionText) {
+  const normalizedQuestion = String(questionText || "").trim();
+  if (normalizedQuestion) {
+    return normalizedQuestion;
+  }
+
+  return resources?.game?.messages?.branchQuestionFallback
+    || "Answer yes or no.";
+}
+
 export function getGameStateMachineDefinition(context) {
   requireGameContext(context);
 
@@ -146,7 +162,7 @@ export function getGameStateMachineDefinition(context) {
             {
               kind: "yes-no-question",
               role: "game",
-              text: `Is it ${currentNode.name}?`,
+              text: animalGuessQuestionOf(machineContext.resources, currentNode.name),
             },
             WAIT_FOR_USER_CHOICE_TIMEOUT_MS,
           );
@@ -186,7 +202,7 @@ export function getGameStateMachineDefinition(context) {
             {
               kind: "yes-no-question",
               role: "game",
-              text: currentNode.question,
+              text: branchQuestionTextOf(machineContext.resources, currentNode.question),
             },
             WAIT_FOR_USER_CHOICE_TIMEOUT_MS,
           );

@@ -120,6 +120,12 @@ function createGameContext(overrides = {}) {
     callLog,
     eventBus,
     resources: {
+      game: {
+        messages: {
+          animalGuessQuestion: (animalLabel) => `ANIMAL_GUESS:${animalLabel}`,
+          branchQuestionFallback: "BRANCH_FALLBACK",
+        },
+      },
       prompts: {
         game: {
           validateAnimalInput: (failedAnimalName, userInput) => `FAILED_ANIMAL_NAME=${failedAnimalName}; USER_INPUT=${userInput}`,
@@ -156,7 +162,7 @@ export function runGameStateMachineTests() {
 
       assertEqual(questionEvents.length, 1, "Game state machine should publish exactly one question event for an animal guess");
       assertEqual(questionEvents[0].message.kind, "yes-no-question", "Game state machine should mark the question as a yes/no question");
-      assertEqual(questionEvents[0].message.text, "Is it cat?", "Game state machine should publish the animal guess question text");
+      assertEqual(questionEvents[0].message.text, "ANIMAL_GUESS:cat", "Game state machine should publish the localized animal guess question text from resources");
       assertArrayEqual(
         context.callLog,
         [],
@@ -221,7 +227,37 @@ export function runGameStateMachineTests() {
       assertEqual(result.context.rootNode.question, "Does it live in water?", "Game state machine should keep the replaced root from the repository response");
     }),
 
-    runTest("state-machine-game-003 invalid current node still throws a clear error", async () => {
+    runTest("state-machine-game-003 blank branch questions use the localized fallback", async () => {
+      const eventBus = new EventMessageBus();
+      const rootNode = new TreeNode({
+        eventBus,
+        question: "   ",
+        yesNode: new TreeNode({ eventBus, name: "eagle" }),
+        noNode: new TreeNode({ eventBus, name: "cat" }),
+      });
+      const context = createGameContext({ eventBus, rootNode });
+      const machine = createGameMachine(context);
+      const published = [];
+      context.eventBus.subscribe("all", "test:game-events:003", (event) => {
+        published.push(event);
+      });
+      const runPromise = machine.run();
+
+      await waitForMicrotask();
+      context.eventBus.publish(EventIds.uiChoiceYes, null);
+      await waitForMicrotask();
+      context.eventBus.publish(EventIds.uiChoiceYes, null);
+      const result = await runPromise;
+
+      const questionEvents = published.filter((event) => event.id === EventIds.gameQuestionAsked);
+
+      assertEqual(questionEvents.length, 2, "Game state machine should ask the branch question and then the animal guess");
+      assertEqual(questionEvents[0].message.text, "BRANCH_FALLBACK", "Game state machine should use the localized fallback when a branch question is blank");
+      assertEqual(questionEvents[1].message.text, "ANIMAL_GUESS:eagle", "Game state machine should keep localized animal guess text after following the fallback branch");
+      assertEqual(result.status, "won", "Game state machine should still complete the round after the fallback branch question");
+    }),
+
+    runTest("state-machine-game-004 invalid current node still throws a clear error", async () => {
       const rootNode = {
         isAnimalNode() {
           return false;
@@ -248,7 +284,7 @@ export function runGameStateMachineTests() {
       );
     }),
 
-    runTest("state-machine-game-004 invalid animal input loops back to step 7 before succeeding", async () => {
+    runTest("state-machine-game-005 invalid animal input loops back to step 7 before succeeding", async () => {
       let validateAnimalCalls = 0;
       let generatedQuestionCalls = 0;
       const context = createGameContext({
@@ -348,7 +384,7 @@ export function runGameStateMachineTests() {
       );
     }),
 
-    runTest("state-machine-game-005 five invalid generated questions finish without saving", async () => {
+    runTest("state-machine-game-006 five invalid generated questions finish without saving", async () => {
       let generatedQuestionCalls = 0;
       const published = [];
       const context = createGameContext({

@@ -37,15 +37,10 @@ export const EventIds = {
   /* others */
   // Core presentation updates.
   appStatusChanged: "app-status-changed",
-  gameContextChanged: "game-context-changed",
   debugContextChanged: "debug-context-changed",
   gameFinished: "game-finished",
   gameClosed: "game-closed",
-  gameRoundStarted: "game-round-started",
-  gameChatCleared: "game-chat-cleared",
-  gameChatMessageAdded: "game-chat-message-added",
   gameQuestionAsked: "game-question-asked",
-  gameInteractionStateChanged: "game-interaction-state-changed",
 
   // State machine lifecycle updates.
   stateMachineTransitioned: "state-machine-transitioned",

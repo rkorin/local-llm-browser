@@ -93,7 +93,7 @@ export function runGamePresenterTests() {
     runTest("presenter-game-002 game state machine start step clears chat and appends exactly one intro message", async () => {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
-      fixture.eventBus.publish(EventIds.gameChatMessageAdded, { role: "user", message: "stale" });
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, { kind: "yes-no-question", role: "game", text: "stale" });
 
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
         machineId: "game-state-machine",
@@ -137,6 +137,7 @@ export function runGamePresenterTests() {
 
     runTest("presenter-game-004 first choice click hides controls and blocks duplicate answers", async () => {
       const fixture = createGamePresenterFixture();
+      fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
       const choices = [];
       fixture.eventBus.subscribe(EventIds.uiChoiceYes, "test:game-panel:choice-lock:yes", (event) => {
         choices.push(event);
@@ -155,6 +156,9 @@ export function runGamePresenterTests() {
       fixture.root.querySelector("#no-button").click();
       fixture.root.querySelector("#yes-button").click();
 
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append the selected answer as a user bubble before publishing it");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "Yes", "GamePresenter should show the localized yes answer in chat immediately");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].classList.contains("user"), true, "GamePresenter should style the selected answer as a user bubble");
       assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice controls immediately after the first answer");
       assertEqual(choices.length, 1, "GamePresenter should publish only one answer while leaving the choice screen");
       assertEqual(choices[0].id, EventIds.uiChoiceYes, "GamePresenter should preserve the first selected answer");
@@ -181,9 +185,13 @@ export function runGamePresenterTests() {
         bubbles: true,
       }));
 
+      assertEqual(fixture.root.querySelector("#chat-log").children.length, 2, "GamePresenter should append the submitted animal as a user bubble before publishing it");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].textContent, "whale", "GamePresenter should show the submitted animal in chat immediately");
+      assertEqual(fixture.root.querySelector("#chat-log").children[1].classList.contains("user"), true, "GamePresenter should style the submitted animal as a user bubble");
       assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), true, "GamePresenter should hide animal input immediately after the first submission");
       assertEqual(submissions.length, 1, "GamePresenter should publish only one animal submission while leaving the input screen");
       assertEqual(submissions[0].message, "whale", "GamePresenter should preserve the first submitted animal value");
+      assertEqual(fixture.root.querySelector("#animal-input").value, "", "GamePresenter should clear the visible input value after capturing the first animal submission");
 
       fixture.cleanup();
     }),
@@ -345,16 +353,20 @@ export function runGamePresenterTests() {
       fixture.cleanup();
     }),
 
-    runTest("presenter-game-009 interaction-state event switches to input mode and clears input field", async () => {
+    runTest("presenter-game-009 step 7 transition switches to input mode and clears input field", async () => {
       const fixture = createGamePresenterFixture();
       fixture.root.querySelector("#animal-input").value = "old value";
 
-      fixture.eventBus.publish(EventIds.gameInteractionStateChanged, { mode: "input" });
+      fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
+        machineId: "game-state-machine",
+        previousNodeId: "step-5-remember-failed-animal-node",
+        currentNodeId: "step-7-request-user-animal",
+      });
 
-      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice row in input mode");
-      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should show input row in input mode");
-      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide restart row in input mode");
-      assertEqual(fixture.root.querySelector("#animal-input").value, "", "GamePresenter should clear the animal input when entering input mode");
+      assertEqual(fixture.root.querySelector("#choice-row").classList.contains("hidden"), true, "GamePresenter should hide choice row at step 7");
+      assertEqual(fixture.root.querySelector("#input-row").classList.contains("hidden"), false, "GamePresenter should show input row at step 7");
+      assertEqual(fixture.root.querySelector("#restart-row").classList.contains("hidden"), true, "GamePresenter should hide restart row at step 7");
+      assertEqual(fixture.root.querySelector("#animal-input").value, "", "GamePresenter should clear the animal input when step 7 opens a fresh input");
 
       fixture.cleanup();
     }),
@@ -363,9 +375,10 @@ export function runGamePresenterTests() {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
-      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
         role: "game",
-        message: "Previous round message",
+        text: "Previous round message",
       });
       const previousBubble = fixture.root.querySelector("#chat-log").children[0];
 
@@ -385,9 +398,10 @@ export function runGamePresenterTests() {
     runTest("presenter-game-011 invalid result replaces progress with an incremental retryable error", async () => {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
-      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
         role: "game",
-        message: "Previous round message",
+        text: "Previous round message",
       });
       const previousBubble = fixture.root.querySelector("#chat-log").children[0];
       fixture.eventBus.publish(EventIds.stateMachineTransitioned, {
@@ -456,9 +470,10 @@ export function runGamePresenterTests() {
       const fixture = createGamePresenterFixture();
       fixture.eventBus.publish(EventIds.appStaticResourcesChanged, ENGLISH_RESOURCES);
 
-      fixture.eventBus.publish(EventIds.gameChatMessageAdded, {
+      fixture.eventBus.publish(EventIds.gameQuestionAsked, {
+        kind: "yes-no-question",
         role: "game",
-        message: "Existing result",
+        text: "Existing result",
       });
       const existingBubble = fixture.root.querySelector("#chat-log").children[0];
 

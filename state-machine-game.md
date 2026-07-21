@@ -2,7 +2,8 @@
 
 `game-state-machine` orchestrates one animal-guessing round. It reads the current decision tree, traverses question nodes from user answers, attempts an animal guess, validates a new animal after a failed guess, asks the LLM to generate and validate a distinguishing question, and persists the learned branch.
 
-Implementation source of truth: [`state-machine-game.js`](./state-machine-game.js).
+Behavioral contract source of truth: this document.
+Implementation: [`state-machine-game.js`](./state-machine-game.js).
 
 ## Transition overview
 
@@ -52,6 +53,38 @@ Any infrastructure timeout or unknown transition that reaches the shared error r
 - Unexpected non-timeout exceptions are not converted into `finish-invalid`; they reject `StateMachine.run()`.
 
 The game machine does not publish `game-finished`. Its terminal node only returns the round result to the bootstrap machine. The bootstrap machine publishes the public `game-finished` event afterward.
+
+## Presenter-facing contract
+
+`GamePresenter` should treat this machine as a producer of exactly two presentation-facing signals:
+
+- automatic `state-machine-transitioned` events before every node entry;
+- explicit `game-question-asked` events only when the machine is ready to show a yes/no question to the user.
+
+The intended split is strict:
+
+- this machine owns tree traversal, validation, generation, persistence, and waiting;
+- the Presenter owns screen selection, chat bubbles, control visibility, and local optimistic UI transitions;
+- this machine does not publish chat-clear, chat-append, input-mode, or generic presentation-state events.
+
+Bootstrap completes the public game lifecycle around this machine:
+
+- after the nested machine returns, bootstrap publishes `game-finished`;
+- after the user chooses to close from the result screen, bootstrap publishes `game-closed`.
+
+For the current Presenter contract, the important step-to-UI mapping is:
+
+| State-machine signal | Presenter expectation |
+|---|---|
+| `state-machine-transitioned(step-1-start-round)` | clear chat, append the round intro, hide all controls |
+| `state-machine-transitioned(step-2-decide-current-node-type)` | enter routing and hide answer controls |
+| `game-question-asked` from step 3 or 6 | append one game question and show Yes / No controls |
+| `state-machine-transitioned(step-7-request-user-animal)` | append the missed-animal prompt once per round, then show the input |
+| `state-machine-transitioned(step-8-validate-user-animal)` | show validation progress and keep controls hidden |
+| `state-machine-transitioned(step-9-report-invalid-animal)` | replace validation progress with invalid-animal feedback |
+| `state-machine-transitioned(step-10-generate-question)` | show generation progress on the shared progress bubble |
+| `state-machine-transitioned(step-11-validate-generated-question)` | update the shared progress bubble for validation |
+| `state-machine-transitioned(step-12-save-learned-question)` | update the shared progress bubble for saving |
 
 ## Required context
 
@@ -158,7 +191,7 @@ Ask whether the animal stored in the current leaf node is the animal selected by
   - payload:
     - `kind: "yes-no-question"`;
     - `role: "game"`;
-    - `text: "Is it <current animal name>?"`.
+    - `text: resources.game.messages.animalGuessQuestion(current animal name)`.
 
 ### Waits for
 
@@ -237,7 +270,8 @@ Ask the decision question stored in the current non-leaf node and follow the sel
   - payload:
     - `kind: "yes-no-question"`;
     - `role: "game"`;
-    - `text: context.currentNode.question`.
+    - `text: context.currentNode.question` when it is non-empty;
+    - otherwise `resources.game.messages.branchQuestionFallback`.
 
 ### Waits for
 
@@ -261,6 +295,8 @@ The first of:
 ### Purpose
 
 Wait for the user to provide the animal that the application failed to guess.
+
+The machine itself does not publish a prompt message here. The Presenter derives the visible prompt and input screen from the step 7 transition.
 
 ### Publishes
 
