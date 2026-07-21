@@ -108,6 +108,8 @@ flowchart TD
 * **Presenters** — event-driven separation of bootstrap/status UI, game UI, and the unfinished debug-panel boundary.
 * **Resource factory** — English and German UI resource modules. Animal normalization and prompt contracts are currently English-only.
 
+For a deeper walkthrough of state ownership, event semantics, nested state-machine orchestration, provider lifecycle, LLM trust boundaries, design patterns, failure handling, testing strategy, and trade-offs, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 This is not a distributed system: every component runs inside one browser page. It intentionally models selected event-driven and distributed-system messaging patterns within a single runtime.
 
 ## LLM Providers
@@ -177,6 +179,7 @@ The test runner uses ES modules and browser APIs directly, without npm or an ext
 
 ```text
 main.js                         runtime composition root
+ARCHITECTURE.md                 detailed architecture, patterns, runtime flows, and trade-offs
 event-ids.js                    canonical event contract
 event-message-bus.js            messaging and timeout semantics
 state-machine.js                generic state-machine engine
